@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'feat/**', 'fix/**']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python (pytest + package)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Sync + test
+        env:
+          EVIDENCE_FAKE_RUNNERS: '1'
+        run: |
+          uv sync --group dev
+          uv run pytest -q
+          uv run evidence-workbench --help
+
+  web:
+    name: Web (typecheck + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  design-lock:
+    name: Design lock present
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify vendored finalized chrome
+        run: |
+          test -f vendor/design/finalized.html
+          test -f vendor/design/FINALIZED.lock.json
+          test -f DESIGN.md
+          # Locked sha256 from eng / design-html SoT
+          echo 'da74c3aaaf0dc78c125222fcb8f75dd8a8fd0e8f615f7d1ee479f14597b00e7f  vendor/design/finalized.html' | sha256sum -c -
