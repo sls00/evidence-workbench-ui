@@ -61,6 +61,7 @@ PATH `exec` only — **no** reverse import from the SDKs.
 src/evidence_workbench/   # FastAPI, runners, locks, index, preflight
 web/                      # Vite + React + TS (DESIGN.md tokens)
 tests/                    # pytest API smoke (fake runners)
+web/e2e/                  # Playwright golden paths (Slice B)
 vendor/design/            # finalized.html + lock meta (CI-checked)
 docs/                     # architecture + README imagery
 ```
@@ -77,9 +78,11 @@ docs/                     # architecture + README imagery
 ```bash
 EVIDENCE_FAKE_RUNNERS=1 uv run pytest -q
 cd web && npm ci && npm run build
+cd web && npm run test:e2e   # installs Chromium if needed, then golden paths
 ```
 
-GitHub Actions: Python smoke, web build, design-lock sha256 check.
+First Playwright run downloads browser binaries to `~/.cache/ms-playwright/` (or run `npm run test:e2e:install`). GitHub Actions: Python smoke, web build, Playwright (fake), design-lock sha256 check.
+Playwright runs inside the runner against `127.0.0.1` (not Windows Cursor browser). Optional `@real-engines` is local/nightly only (B5).
 
 ## Design locks
 

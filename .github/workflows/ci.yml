@@ -66,6 +66,46 @@ jobs:
       - run: npm ci
       - run: npm run build
 
+  playwright:
+    name: Playwright (fake runners)
+    needs: detect
+    if: needs.detect.outputs.has_web == 'true' && needs.detect.outputs.has_python == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Sync Python + install browsers
+        env:
+          EVIDENCE_FAKE_RUNNERS: '1'
+        run: |
+          uv sync --group dev
+          cd web && npm ci
+          npx playwright install --with-deps chromium
+      - name: Build SPA + golden paths
+        env:
+          CI: 'true'
+          EVIDENCE_FAKE_RUNNERS: '1'
+        run: |
+          cd web
+          npm run test:e2e
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: web/playwright-report/
+          retention-days: 7
+
   design-lock:
     name: Design lock present
     needs: detect

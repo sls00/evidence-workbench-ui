@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -10,33 +9,11 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from evidence_workbench.app import create_app
 from evidence_workbench.locks import LockBusyError, NamespaceLock, try_acquire, release
 from evidence_workbench.preflight import run_preflight
 from evidence_workbench.run_index import IndexEntry, RunIndex, mint_run_id
-from evidence_workbench.settings import Settings, load_settings, resolve_runs_root
+from evidence_workbench.settings import Settings, resolve_runs_root
 from evidence_workbench.status import map_engine_status
-
-
-@pytest.fixture()
-def runs_root(tmp_path: Path) -> Path:
-    root = tmp_path / ".evidence-runs"
-    root.mkdir()
-    return root
-
-
-@pytest.fixture()
-def settings(runs_root: Path, tmp_path: Path) -> Settings:
-    # Point at real siblings when present; fake runners ignore engines
-    base = load_settings(env={"EVIDENCE_RUNS_ROOT": str(runs_root), "EVIDENCE_FAKE_RUNNERS": "1"})
-    return replace(base, runs_root=runs_root, fake_runners=True)
-
-
-@pytest.fixture()
-def client(settings: Settings) -> TestClient:
-    app = create_app(settings)
-    with TestClient(app) as c:
-        yield c
 
 
 def test_mint_run_id_format():

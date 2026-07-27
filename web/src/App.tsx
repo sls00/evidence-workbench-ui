@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   cancelRun,
+  fetchInspect,
   fetchPreflight,
   fetchPresets,
+  fetchTimeline,
   getRun,
   listRuns,
   reverify,
   startRun,
   type Home,
+  type InspectPayload,
   type PreflightCheck,
   type Preset,
   type RunSnapshot,
+  type TimelinePayload,
 } from './api'
 
 const OCC_SECTIONS = ['§I', '§II', '§III', '§IV', '§V', '§VI', '§VII'] as const
@@ -83,6 +87,18 @@ function copyText(text: string, toast: (m: string) => void) {
   )
 }
 
+function formatInspectValue(value: unknown): string {
+  if (value === null || value === undefined) return '—'
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value)
+  }
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
+}
+
 export default function App() {
   const [home, setHome] = useState<Home>(homeFromUrl)
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
@@ -100,6 +116,8 @@ export default function App() {
   const [toast, setToast] = useState('')
   const [occ, setOcc] = useState<(typeof OCC_SECTIONS)[number]>('§I')
   const [errorBanner, setErrorBanner] = useState<string | null>(null)
+  const [timeline, setTimeline] = useState<TimelinePayload | null>(null)
+  const [inspect, setInspect] = useState<InspectPayload | null>(null)
 
   const showToast = useCallback((m: string) => {
     setToast(m)
@@ -134,9 +152,37 @@ export default function App() {
   useEffect(() => {
     setHomeUrl(home)
     setActive(null)
+    setTimeline(null)
+    setInspect(null)
     setErrorBanner(null)
     void refreshMeta(home).catch((e) => setErrorBanner(String(e)))
   }, [home, refreshMeta])
+
+  const loadPostRun = useCallback(async (runId: string) => {
+    try {
+      const [tl, insp] = await Promise.all([fetchTimeline(runId), fetchInspect(runId)])
+      setTimeline(tl)
+      setInspect(insp)
+    } catch {
+      setTimeline(null)
+      setInspect(null)
+    }
+  }, [])
+
+  // Load post-run timeline/inspect whenever a terminal run is active
+  useEffect(() => {
+    if (!active?.run_id) {
+      setTimeline(null)
+      setInspect(null)
+      return
+    }
+    if (['running', 'queued', 'accepted'].includes(active.status)) {
+      setTimeline(null)
+      setInspect(null)
+      return
+    }
+    void loadPostRun(active.run_id)
+  }, [active?.run_id, active?.status, loadPostRun])
 
   // Poll active run
   useEffect(() => {
@@ -318,7 +364,12 @@ export default function App() {
                   <span className="kbd">r</span>
                 </button>
                 {busy && (
-                  <button className="btn" type="button" onClick={() => void onCancel()}>
+                  <button
+                    className="btn"
+                    type="button"
+                    data-action="cancel"
+                    onClick={() => void onCancel()}
+                  >
                     Cancel
                   </button>
                 )}
@@ -326,6 +377,7 @@ export default function App() {
                   <button
                     className="btn"
                     type="button"
+                    data-action="reverify"
                     disabled={!active?.run_id || busy}
                     onClick={() => void onReverify()}
                   >
@@ -376,13 +428,19 @@ export default function App() {
               )}
 
               {active && active.status !== 'running' && active.finding_title ? (
-                <div className={`finding-card${settle ? ' settle' : ''}`}>
-                  <div className="big">{active.finding_title}</div>
+                <div
+                  className={`finding-card${settle ? ' settle' : ''}`}
+                  data-testid="finding-card"
+                  data-status={active.status}
+                >
+                  <div className="big" data-testid="finding-title">
+                    {active.finding_title}
+                  </div>
                   {active.finding_subtitle && <div className="sub">{active.finding_subtitle}</div>}
                   <div style={{ marginTop: 8 }}>
                     <StatusDot state={active.status} />
                     {active.verify_status && (
-                      <span style={{ marginLeft: 8 }}>
+                      <span style={{ marginLeft: 8 }} data-testid="verify-chip">
                         <StatusDot state={active.verify_status === 'PASS' ? 'pass' : active.verify_status === 'FAIL' ? 'fail' : 'qualified'} />
                         <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>
                           verify={active.verify_status}
@@ -392,14 +450,14 @@ export default function App() {
                   </div>
                 </div>
               ) : busy ? (
-                <div className="finding-card">
+                <div className="finding-card" data-testid="finding-card" data-status="running">
                   <div className="big" style={{ fontSize: 20 }}>
                     Running…
                   </div>
                   <div className="sub">Coarse status only — no live stage stream (Slice A)</div>
                 </div>
               ) : (
-                <div className="finding-card">
+                <div className="finding-card" data-testid="finding-card" data-status="idle">
                   <div className="big" style={{ fontSize: 20, color: 'var(--text-muted)' }}>
                     No run yet
                   </div>
@@ -433,6 +491,65 @@ export default function App() {
                     </button>
                   ))}
                 </div>
+              )}
+
+              {active && !['running', 'queued', 'accepted'].includes(active.status) && (
+                <section className="post-run" aria-label="Post-run evidence">
+                  <div className="post-run-block" data-testid="timeline-pane">
+                    <p className="stage-label">
+                      {home === 'generator' ? 'Manifest timeline' : 'Audit timeline'}
+                      {timeline?.source ? ` · ${timeline.source}` : ''}
+                    </p>
+                    {timeline?.empty || !timeline?.events?.length ? (
+                      <div className="compact-blank">
+                        {timeline?.honesty || 'No timeline for this run.'}
+                      </div>
+                    ) : (
+                      <ol className="timeline">
+                        {timeline.events.map((ev) => (
+                          <li key={`${ev.index}-${ev.id}`} className="timeline-row">
+                            <span className="timeline-label">{ev.label}</span>
+                            {ev.detail && Object.keys(ev.detail).length > 0 && (
+                              <span className="timeline-detail">
+                                {Object.entries(ev.detail)
+                                  .slice(0, 3)
+                                  .map(([k, v]) => `${k}=${formatInspectValue(v)}`)
+                                  .join(' · ')}
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                  </div>
+
+                  <div className="post-run-block" data-testid="inspect-pane">
+                    <p className="stage-label">Metric inspect · allowlisted artifacts</p>
+                    {inspect?.empty || !inspect?.panes?.length ? (
+                      <div className="compact-blank">
+                        {inspect?.honesty || 'No inspect panes for this run.'}
+                      </div>
+                    ) : (
+                      <div className="inspect-grid">
+                        {inspect.panes.map((pane) => (
+                          <div className="inspect-well" key={pane.id}>
+                            <p className="integrity-label">
+                              {pane.title}
+                              <span className="inspect-source">{pane.source}</span>
+                            </p>
+                            {pane.fields.map((f) => (
+                              <div className="row" key={f.key}>
+                                <span className="noun">{f.key}</span>
+                                <span className="val">{formatInspectValue(f.value)}</span>
+                                <span />
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </section>
               )}
             </div>
 
@@ -526,6 +643,8 @@ export default function App() {
                     key={row.run_id}
                     type="button"
                     className={`run${active?.run_id === row.run_id ? ' active' : ''}`}
+                    data-testid="library-run"
+                    data-run-id={row.run_id}
                     style={{ display: 'block', width: '100%', textAlign: 'left' }}
                     onClick={() => {
                       void getRun(row.run_id).then(setActive)

@@ -268,6 +268,36 @@ class Orchestrator:
         self._assert_under_run(Path(entry.artifact_dir), path)
         return path
 
+    def _run_context(self, run_id: str) -> tuple[str, str, str, Path]:
+        """Return (home, status, run_id, run_dir) for artifact APIs."""
+        with self._lock:
+            active = self._active.get(run_id)
+        if active is not None:
+            snap = active.runner.poll()
+            active.snapshot = snap
+            if is_terminal(snap.status) and not active.indexed:
+                self._finalize(active, snap)
+            return active.home, snap.status, active.run_id, active.artifact_dir
+        entry = self.index.get(run_id)
+        if entry is None:
+            raise KeyError(run_id)
+        home = entry.home or ("generator" if entry.namespace == "synth-fin" else "validation")
+        return home, entry.status, entry.run_id, Path(entry.artifact_dir)
+
+    def timeline(self, run_id: str) -> dict[str, Any]:
+        from evidence_workbench.artifacts import build_timeline
+
+        home, status, rid, run_dir = self._run_context(run_id)
+        self._assert_under_run(run_dir, run_dir.resolve())
+        return build_timeline(run_id=rid, home=home, status=status, run_dir=run_dir)
+
+    def inspect(self, run_id: str) -> dict[str, Any]:
+        from evidence_workbench.artifacts import build_inspect
+
+        home, status, rid, run_dir = self._run_context(run_id)
+        self._assert_under_run(run_dir, run_dir.resolve())
+        return build_inspect(run_id=rid, home=home, status=status, run_dir=run_dir)
+
     def _assert_under_run(self, run_dir: Path, path: Path) -> None:
         run_dir = run_dir.resolve()
         try:

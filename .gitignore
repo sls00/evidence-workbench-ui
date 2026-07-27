@@ -22,5 +22,10 @@ htmlcov/
 .worktrees/*
 !.worktrees/README.md
 
-# Local QA run trees (do not commit)
+# Local QA / Playwright run trees (do not commit)
 .evidence-runs-qa/
+.evidence-runs-e2e/
+web/test-results/
+web/playwright-report/
+web/blob-report/
+web/playwright/.cache/

@@ -6,18 +6,6 @@ Source plan: `~/.gstack/projects/portfolio/sls00-evidence-workbench-eng-review-2
 
 ## Slice B
 
-### Playwright golden-path E2E
-
-**What:** Add Playwright coverage for both ≤3-click golden paths (Generator `bias_demo_1k`, Validation `gc_full`) plus preflight-blocked Run and cancel→incomplete.
-
-**Why:** Office-hours / eng-review deferred browser E2E until packaging + chrome stabilize; without this TODO the hiring-demo paths lack durable regression coverage after Slice A API smoke.
-
-**Context:** Slice A CI is unit + API smoke with fake runners (mandatory cancel test). Playwright should hit the real SPA against a local `evidence-workbench` server with fixtures/roots available. Start from the eng-review test plan QA artifact. Match DESIGN.md / `vendor/design/finalized.html` composition — do not redesign. Keys: `r` Run, home tabs, library reopen.
-
-**Effort:** M  
-**Priority:** P2  
-**Depends on:** Slice A T5–T7 (API + chrome wired); optional real `@integration` roots/LFS for full engine paths
-
 ### Live stage progress (SDK events)
 
 **What:** When synth-fin / workbench SDKs expose stage events, wire optional live Run-stage progress (manifest/audit timeline) — replace post-hoc-only busy spinner.
@@ -47,4 +35,10 @@ Source plan: `~/.gstack/projects/portfolio/sls00-evidence-workbench-eng-review-2
 
 ## Completed
 
-_(none yet)_
+### Playwright golden-path E2E (Slice B1)
+
+**What:** Playwright coverage for both ≤3-click golden paths (Generator `bias_demo_1k`, Validation `gc_full`) plus preflight-blocked Run, cancel→incomplete, and library reopen — fake runners default in CI (`web/e2e/`, `npm run test:e2e`).
+
+**Why:** Durable regression coverage for hiring-demo paths after Slice A API smoke.
+
+**Shipped:** 2026-07-27 on `feat/slice-b` (B1). Optional `@real-engines` remains B5 (local/nightly).
