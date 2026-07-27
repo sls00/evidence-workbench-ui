@@ -1,0 +1,588 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  cancelRun,
+  fetchPreflight,
+  fetchPresets,
+  getRun,
+  listRuns,
+  reverify,
+  startRun,
+  type Home,
+  type PreflightCheck,
+  type Preset,
+  type RunSnapshot,
+} from './api'
+
+const OCC_SECTIONS = ['§I', '§II', '§III', '§IV', '§V', '§VI', '§VII'] as const
+
+function homeFromUrl(): Home {
+  const q = new URLSearchParams(window.location.search).get('home')
+  return q === 'validation' ? 'validation' : 'generator'
+}
+
+function setHomeUrl(home: Home) {
+  const url = new URL(window.location.href)
+  url.searchParams.set('home', home)
+  window.history.replaceState({}, '', url)
+}
+
+function PanelToggle({
+  expanded,
+  onToggle,
+  label,
+}: {
+  expanded: boolean
+  onToggle: () => void
+  label: string
+}) {
+  return (
+    <button
+      className="panel-toggle"
+      type="button"
+      aria-expanded={expanded}
+      title={`Toggle ${label}`}
+      aria-label={`Toggle ${label}`}
+      onClick={onToggle}
+    >
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <rect x="1.5" y="1.5" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.25" />
+        <line x1="5.5" y1="1.5" x2="5.5" y2="14.5" stroke="currentColor" strokeWidth="1.25" />
+        <rect className="pane-fill" x="1.5" y="1.5" width="4" height="13" />
+      </svg>
+    </button>
+  )
+}
+
+function StatusDot({ state }: { state: string }) {
+  const cls =
+    state === 'ok' || state === 'pass'
+      ? 'pass'
+      : state === 'failed' || state === 'fail'
+        ? 'fail'
+        : 'qualified'
+  const label =
+    state === 'ok' || state === 'pass'
+      ? 'pass'
+      : state === 'failed' || state === 'fail'
+        ? 'fail'
+        : state === 'qualified'
+          ? 'qualified'
+          : state
+  return (
+    <span className="chip-status">
+      <span className={`dot ${cls}`} />
+      {label}
+    </span>
+  )
+}
+
+function copyText(text: string, toast: (m: string) => void) {
+  void navigator.clipboard.writeText(text).then(
+    () => toast('Copied'),
+    () => toast('Copy failed'),
+  )
+}
+
+export default function App() {
+  const [home, setHome] = useState<Home>(homeFromUrl)
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark')
+  const [railOpen, setRailOpen] = useState(true)
+  const [libOpen, setLibOpen] = useState(false)
+  const [checks, setChecks] = useState<PreflightCheck[]>([])
+  const [canRun, setCanRun] = useState(false)
+  const [presets, setPresets] = useState<Preset[]>([])
+  const [presetId, setPresetId] = useState('')
+  const [active, setActive] = useState<RunSnapshot | null>(null)
+  const [library, setLibrary] = useState<RunSnapshot[]>([])
+  const [libWarnings, setLibWarnings] = useState<string[]>([])
+  const [busy, setBusy] = useState(false)
+  const [settle, setSettle] = useState(false)
+  const [toast, setToast] = useState('')
+  const [occ, setOcc] = useState<(typeof OCC_SECTIONS)[number]>('§I')
+  const [errorBanner, setErrorBanner] = useState<string | null>(null)
+
+  const showToast = useCallback((m: string) => {
+    setToast(m)
+    window.setTimeout(() => setToast(''), 1500)
+  }, [])
+
+  const selected = useMemo(
+    () => presets.find((p) => p.id === presetId) || presets[0],
+    [presets, presetId],
+  )
+
+  const refreshMeta = useCallback(async (h: Home) => {
+    const [pf, pr, lib] = await Promise.all([
+      fetchPreflight(h),
+      fetchPresets(h),
+      listRuns(h),
+    ])
+    setChecks(pf.checks)
+    setCanRun(pf.can_run)
+    setPresets(pr.presets)
+    const def = pr.presets.find((p) => p.default) || pr.presets[0]
+    setPresetId((cur) => (pr.presets.some((p) => p.id === cur) ? cur : def?.id || ''))
+    setLibrary(lib.runs)
+    setLibWarnings(lib.warnings || [])
+  }, [])
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    document.documentElement.setAttribute('data-variant', 'C')
+  }, [theme])
+
+  useEffect(() => {
+    setHomeUrl(home)
+    setActive(null)
+    setErrorBanner(null)
+    void refreshMeta(home).catch((e) => setErrorBanner(String(e)))
+  }, [home, refreshMeta])
+
+  // Poll active run
+  useEffect(() => {
+    if (!active?.run_id || !['running', 'queued', 'accepted'].includes(active.status)) return
+    const t = window.setInterval(() => {
+      void getRun(active.run_id).then((snap) => {
+        setActive(snap)
+        if (!['running', 'queued'].includes(snap.status)) {
+          setBusy(false)
+          setSettle(true)
+          window.setTimeout(() => setSettle(false), 300)
+          void refreshMeta(home)
+        }
+      })
+    }, 400)
+    return () => window.clearInterval(t)
+  }, [active?.run_id, active?.status, home, refreshMeta])
+
+  const onRun = useCallback(async () => {
+    if (!canRun || busy || !presetId) return
+    setBusy(true)
+    setErrorBanner(null)
+    try {
+      const { run_id } = await startRun(home, presetId)
+      const snap = await getRun(run_id)
+      setActive(snap)
+      setLibOpen(true)
+    } catch (e) {
+      setBusy(false)
+      const err = e as Error & { status?: number; detail?: { detail?: { error?: { message?: string } } } }
+      const msg =
+        err.detail && typeof err.detail === 'object'
+          ? JSON.stringify(err.detail)
+          : String(e)
+      setErrorBanner(msg)
+    }
+  }, [busy, canRun, home, presetId])
+
+  const onCancel = useCallback(async () => {
+    if (!active?.run_id) return
+    const snap = await cancelRun(active.run_id)
+    setActive(snap)
+    setBusy(false)
+    void refreshMeta(home)
+  }, [active?.run_id, home, refreshMeta])
+
+  const onReverify = useCallback(async () => {
+    if (!active?.run_id || home !== 'validation') return
+    const snap = await reverify(active.run_id)
+    setActive((prev) => ({ ...(prev || snap), ...snap, run_id: active.run_id }))
+    showToast(`Verify ${snap.verify_status || 'done'}`)
+  }, [active?.run_id, home, showToast])
+
+  // Keyboard map
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      const tag = (ev.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      if (ev.key === '1') setHome('generator')
+      if (ev.key === '2') setHome('validation')
+      if (ev.key === '[') setRailOpen((v) => !v)
+      if (ev.key === ']') setLibOpen((v) => !v)
+      if (ev.key === 'r' || ev.key === 'R') void onRun()
+      if (ev.key === 'v' || ev.key === 'V') void onReverify()
+      if (ev.key === 't' || ev.key === 'T') setTheme((th) => (th === 'dark' ? 'light' : 'dark'))
+      if (ev.key === 'c' || ev.key === 'C') {
+        const token = active?.config_hash || active?.run_id
+        if (token) copyText(token, showToast)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [active?.config_hash, active?.run_id, onReverify, onRun, showToast])
+
+  const layoutClass = [
+    'layout',
+    'home',
+    railOpen ? '' : 'rail-collapsed',
+    libOpen ? '' : 'lib-collapsed',
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  const reportSrc = active?.run_id && active.primary_report && !active.artifacts_missing
+    ? `/api/runs/${active.run_id}/report`
+    : null
+
+  return (
+    <div className="app">
+      <div className="shell">
+        <div className="shell-header">
+          <div className="shell-brand">Evidence Workbench</div>
+          <div className="shell-meta">local · review-support only · not a compliance determination</div>
+        </div>
+
+        <div className="shell-tabs" role="tablist">
+          <button
+            className={`shell-tab${home === 'generator' ? ' active' : ''}`}
+            role="tab"
+            type="button"
+            aria-selected={home === 'generator'}
+            onClick={() => setHome('generator')}
+          >
+            Home: Generator Console (synth-fin)
+          </button>
+          <button
+            className={`shell-tab${home === 'validation' ? ' active' : ''}`}
+            role="tab"
+            type="button"
+            aria-selected={home === 'validation'}
+            onClick={() => setHome('validation')}
+          >
+            Home: Validation Review (ai-mrg-bench)
+          </button>
+        </div>
+
+        <div className="preflight" aria-live="polite">
+          {checks.map((c, i) => (
+            <span
+              key={c.id}
+              className={`pf ${c.status === 'ok' ? 'ok' : c.status === 'warn' ? 'warn' : ''}`}
+              style={{
+                color: c.status === 'blocker' ? 'var(--fail)' : undefined,
+                animationDelay: `${i * 40}ms`,
+              }}
+              title={c.error?.hint || c.error?.message || undefined}
+            >
+              {c.status === 'blocker' ? `[blocker] ${c.label}` : c.label}
+            </span>
+          ))}
+        </div>
+
+        <div className={layoutClass} data-home={home}>
+          <aside className="rail" aria-label="Controls">
+            <div className="panel-head">
+              <h3 className="region-h">Controls</h3>
+              <PanelToggle expanded={railOpen} onToggle={() => setRailOpen((v) => !v)} label="Controls" />
+            </div>
+            <div className="panel-body panel-body--full">
+              <label className="field-label">Preset</label>
+              {presets.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className={`field${presetId === p.id ? ' selected' : ''}`}
+                  style={{ display: 'block', width: '100%', textAlign: 'left', marginBottom: 6, cursor: 'pointer' }}
+                  onClick={() => setPresetId(p.id)}
+                >
+                  {p.summary || p.id}
+                </button>
+              ))}
+              {home === 'generator' && selected && (
+                <>
+                  <label className="field-label">Scenario</label>
+                  <div className="field">{selected.scenario}</div>
+                  <label className="field-label">Bias profile</label>
+                  <div className="field">{selected.bias_profile}</div>
+                  <label className="field-label">n / seed</label>
+                  <div className="field">
+                    {selected.n} / {selected.seed}
+                  </div>
+                </>
+              )}
+              {home === 'validation' && selected && (
+                <>
+                  <label className="field-label">Config</label>
+                  <div className="field">{selected.config_relpath}</div>
+                </>
+              )}
+              <div style={{ marginTop: 14, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                <button
+                  className="btn primary"
+                  type="button"
+                  data-action="run"
+                  disabled={!canRun || busy}
+                  onClick={() => void onRun()}
+                >
+                  {busy ? 'Running…' : 'Run demo'}
+                  <span className="kbd">r</span>
+                </button>
+                {busy && (
+                  <button className="btn" type="button" onClick={() => void onCancel()}>
+                    Cancel
+                  </button>
+                )}
+                {home === 'validation' && (
+                  <button
+                    className="btn"
+                    type="button"
+                    disabled={!active?.run_id || busy}
+                    onClick={() => void onReverify()}
+                  >
+                    Re-verify<span className="kbd">v</span>
+                  </button>
+                )}
+              </div>
+              {!canRun && (
+                <p style={{ marginTop: 12, fontSize: 11, color: 'var(--fail)' }}>
+                  Run disabled until preflight blockers clear.
+                </p>
+              )}
+            </div>
+            <div className="panel-body panel-body--compact" aria-label="Controls summary">
+              <div className="compact-card">
+                <span className="k">Preset</span>
+                <span className="v">{presetId || '—'}</span>
+              </div>
+              <button
+                className="btn primary compact-run"
+                type="button"
+                disabled={!canRun || busy}
+                onClick={() => void onRun()}
+              >
+                {busy ? '…' : 'Run'}
+              </button>
+              <div className="compact-blank">Full form hidden — expand Controls</div>
+            </div>
+          </aside>
+
+          <main className="cockpit">
+            <div className="stage-upper">
+              <div className="disclaimer">
+                Non-certification disclaimer (persistent): analytical / review-support only. Does not
+                constitute legal advice or a determination of compliance.
+              </div>
+
+              {errorBanner && (
+                <div className="disclaimer" style={{ borderLeftColor: 'var(--fail)', marginBottom: 12 }}>
+                  {errorBanner}
+                </div>
+              )}
+
+              {active?.artifacts_missing && (
+                <div className="disclaimer" style={{ borderLeftColor: 'var(--qualified)' }}>
+                  Artifacts missing — primary report not on disk. Row kept for honesty.
+                </div>
+              )}
+
+              {active && active.status !== 'running' && active.finding_title ? (
+                <div className={`finding-card${settle ? ' settle' : ''}`}>
+                  <div className="big">{active.finding_title}</div>
+                  {active.finding_subtitle && <div className="sub">{active.finding_subtitle}</div>}
+                  <div style={{ marginTop: 8 }}>
+                    <StatusDot state={active.status} />
+                    {active.verify_status && (
+                      <span style={{ marginLeft: 8 }}>
+                        <StatusDot state={active.verify_status === 'PASS' ? 'pass' : active.verify_status === 'FAIL' ? 'fail' : 'qualified'} />
+                        <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>
+                          verify={active.verify_status}
+                        </span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ) : busy ? (
+                <div className="finding-card">
+                  <div className="big" style={{ fontSize: 20 }}>
+                    Running…
+                  </div>
+                  <div className="sub">Coarse status only — no live stage stream (Slice A)</div>
+                </div>
+              ) : (
+                <div className="finding-card">
+                  <div className="big" style={{ fontSize: 20, color: 'var(--text-muted)' }}>
+                    No run yet
+                  </div>
+                  <div className="sub">Select a preset and Run (≤3 clicks from deep-link).</div>
+                </div>
+              )}
+
+              {home === 'generator' && active?.pillars && active.pillars.length > 0 && (
+                <div className="pillars">
+                  {active.pillars.map((p) => (
+                    <div className="pillar" key={p.name}>
+                      <strong>{p.name}</strong>
+                      <span style={{ marginTop: 6, display: 'inline-block' }}>
+                        <StatusDot state={p.state} />
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {home === 'validation' && (
+                <div className="occ-nav" role="navigation" aria-label="OCC sections">
+                  {OCC_SECTIONS.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      className={occ === s ? 'active' : ''}
+                      onClick={() => setOcc(s)}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="stage-lower">
+              <p className="stage-label">
+                {home === 'generator' ? 'Proof deck · integrity' : 'Proof deck · verify-chain'}
+              </p>
+              <div className="proof-deck">
+                <div className="well">
+                  <p className="integrity-label">
+                    {home === 'generator' ? 'Integrity' : 'Verify chain'}
+                  </p>
+                  <div className="row">
+                    <span className="noun">run_id</span>
+                    <span className="val">{active?.run_id || '—'}</span>
+                    {active?.run_id && (
+                      <button className="act" type="button" onClick={() => copyText(active.run_id, showToast)}>
+                        Copy
+                      </button>
+                    )}
+                  </div>
+                  <div className="row">
+                    <span className="noun">config_hash</span>
+                    <span className="val">{active?.config_hash || '—'}</span>
+                    {active?.config_hash && (
+                      <button
+                        className="act"
+                        type="button"
+                        onClick={() => copyText(active.config_hash!, showToast)}
+                      >
+                        Copy
+                      </button>
+                    )}
+                  </div>
+                  {home === 'validation' && (
+                    <div className="row">
+                      <span className="noun">verify</span>
+                      <span className="val">{active?.verify_status || '—'}</span>
+                      <span />
+                    </div>
+                  )}
+                  {home === 'validation' && (active?.verify_breaks?.length || 0) > 0 && (
+                    <div className="chain">
+                      {active!.verify_breaks!.map((b, i) => (
+                        <span className="seg" key={i}>
+                          break: {b.reason || i}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {home === 'validation' && active?.verify_status === 'PASS' && (
+                    <div className="chain">
+                      <span className="seg pass">chain PASS</span>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  {reportSrc ? (
+                    <iframe
+                      title="Report"
+                      src={reportSrc}
+                      style={{
+                        width: '100%',
+                        minHeight: 220,
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-md)',
+                        background: 'var(--bg-elevated)',
+                      }}
+                    />
+                  ) : (
+                    <div className="compact-blank" style={{ minHeight: 120 }}>
+                      Report embed when primary_report exists
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </main>
+
+          <aside className="library" aria-label="Run library">
+            <div className="panel-head">
+              <h3 className="region-h">Run library</h3>
+              <PanelToggle expanded={libOpen} onToggle={() => setLibOpen((v) => !v)} label="Run library" />
+            </div>
+            <div className="panel-body panel-body--full">
+              {library.length === 0 ? (
+                <div className="compact-blank">No runs yet — first-run empty state</div>
+              ) : (
+                library.map((row) => (
+                  <button
+                    key={row.run_id}
+                    type="button"
+                    className={`run${active?.run_id === row.run_id ? ' active' : ''}`}
+                    style={{ display: 'block', width: '100%', textAlign: 'left' }}
+                    onClick={() => {
+                      void getRun(row.run_id).then(setActive)
+                      if (row.artifacts_missing) showToast('Artifacts missing')
+                    }}
+                  >
+                    <div>
+                      {row.preset_id} · {row.status}
+                      {row.artifacts_missing ? ' · missing' : ''}
+                    </div>
+                    <div className="id">{row.run_id}</div>
+                  </button>
+                ))
+              )}
+              {libWarnings.length > 0 && (
+                <p style={{ fontSize: 10, color: 'var(--qualified)', marginTop: 8 }}>
+                  {libWarnings.join(' · ')}
+                </p>
+              )}
+            </div>
+            <div className="panel-body panel-body--compact" aria-label="Library summary">
+              <div className="compact-card">
+                <span className="k">Active</span>
+                <span className="v">{active?.run_id || '—'}</span>
+              </div>
+              <div className="compact-card">
+                <span className="k">Count</span>
+                <span className="v">{library.length}</span>
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        <div className="keymap" aria-label="Keyboard shortcuts">
+          <span>
+            <kbd>1</kbd>/<kbd>2</kbd> homes
+          </span>
+          <span>
+            <kbd>[</kbd>/<kbd>]</kbd> panels
+          </span>
+          <span>
+            <kbd>r</kbd> Run
+          </span>
+          <span>
+            <kbd>v</kbd> Re-verify
+          </span>
+          <span>
+            <kbd>c</kbd> copy token
+          </span>
+          <span>
+            <kbd>t</kbd> theme
+          </span>
+        </div>
+      </div>
+      <div className={`toast${toast ? ' show' : ''}`} role="status">
+        {toast}
+      </div>
+    </div>
+  )
+}

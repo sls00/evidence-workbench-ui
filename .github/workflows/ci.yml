@@ -11,8 +11,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Bootstrap main may only contain license/docs/hygiene until Slice A merges.
+  detect:
+    name: Detect package tree
+    runs-on: ubuntu-latest
+    outputs:
+      has_python: ${{ steps.files.outputs.has_python }}
+      has_web: ${{ steps.files.outputs.has_web }}
+      has_design: ${{ steps.files.outputs.has_design }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: files
+        run: |
+          echo "has_python=$([ -f pyproject.toml ] && [ -d src/evidence_workbench ] && [ -d tests ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "has_web=$([ -f web/package.json ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "has_design=$([ -f vendor/design/finalized.html ] && [ -f vendor/design/FINALIZED.lock.json ] && [ -f DESIGN.md ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
   python:
     name: Python (pytest + package)
+    needs: detect
+    if: needs.detect.outputs.has_python == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,6 +50,8 @@ jobs:
 
   web:
     name: Web (typecheck + build)
+    needs: detect
+    if: needs.detect.outputs.has_web == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -48,6 +68,8 @@ jobs:
 
   design-lock:
     name: Design lock present
+    needs: detect
+    if: needs.detect.outputs.has_design == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -58,3 +80,16 @@ jobs:
           test -f DESIGN.md
           # Locked sha256 from eng / design-html SoT
           echo 'da74c3aaaf0dc78c125222fcb8f75dd8a8fd0e8f615f7d1ee479f14597b00e7f  vendor/design/finalized.html' | sha256sum -c -
+
+  bootstrap:
+    name: Bootstrap hygiene (no package tree yet)
+    needs: detect
+    if: needs.detect.outputs.has_python != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require license + workflow
+        run: |
+          test -f LICENSE
+          test -f .github/workflows/ci.yml
+          echo "Bootstrap main — package CI skipped until Slice A lands on main."
