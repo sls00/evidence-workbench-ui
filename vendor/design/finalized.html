@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark" data-variant="C">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Evidence Workbench — finalized (C′ spacing)</title>
+<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@400;500;700;800&display=swap"/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/fontsource/css/commit-mono@5.3.0/index.css"/>
+<style>
+:root, [data-theme="dark"] {
+  --bg-canvas: #0E1114;
+  --bg-panel: #161B20;
+  --bg-elevated: #1E252C;
+  --border: #2A333C;
+  --text: #E8EAED;
+  --text-muted: #9AA3AD;
+  --accent: #D4A574;
+  --selection: #7A93A8; /* cool slate — chrome selection; not proof */
+  --pass: #8FAF93;
+  --fail: #D4726A;
+  --qualified: #D4A574;
+  --disclaimer-bg: #1A1814;
+  --well: #14191E;
+  --focus: #D4A574;
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --font-display: "Cabinet Grotesk", "CabinetGrotesk", system-ui, sans-serif;
+  --font-mono: "Commit Mono", "CommitMono", ui-monospace, monospace;
+}
+[data-theme="light"] {
+  --bg-canvas: #F4F5F6;
+  --bg-panel: #FFFFFF;
+  --bg-elevated: #EEF0F2;
+  --border: #D5DAE0;
+  --text: #161B20;
+  --text-muted: #5C6670;
+  --accent: #9A6B3C;
+  --selection: #4D6578; /* cool slate — chrome selection; not proof */
+  --pass: #3F6B48;
+  --fail: #B1433C;
+  --qualified: #9A6B3C;
+  --disclaimer-bg: #F7F1E8;
+  --well: #F0F2F4;
+  --focus: #9A6B3C;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+body {
+  font-family: var(--font-mono);
+  font-size: 14px; line-height: 1.5; font-weight: 400;
+  background: var(--bg-canvas); color: var(--text);
+  background-image:
+    linear-gradient(rgba(42,51,60,0.35) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(42,51,60,0.35) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-attachment: fixed;
+  display: flex; flex-direction: column; min-height: 100vh;
+}
+[data-theme="light"] body {
+  background-image:
+    linear-gradient(rgba(213,218,224,0.55) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(213,218,224,0.55) 1px, transparent 1px);
+}
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.variant-banner {
+  flex-shrink: 0;
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: 8px 14px; border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated); font-size: 11px; color: var(--text-muted);
+}
+.variant-banner strong { color: var(--text); font-weight: 600; }
+.variant-banner .tag {
+  border: 1px solid var(--accent); color: var(--accent);
+  padding: 2px 8px; border-radius: var(--radius-sm); letter-spacing: 0.04em;
+}
+.app { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.shell {
+  flex: 1; display: flex; flex-direction: column; min-height: 0;
+  border: none; background: var(--bg-panel);
+}
+.shell-header {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 14px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.shell-brand {
+  font-family: var(--font-display); font-size: 22px; font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.shell-meta { font-size: 11px; color: var(--text-muted); }
+.shell-tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.shell-tab {
+  padding: 10px 16px; font-size: 12px; color: var(--text-muted);
+  cursor: pointer; background: transparent; font-family: var(--font-mono);
+  border: none; border-right: 1px solid var(--border);
+}
+.shell-tab.active {
+  color: var(--text); font-weight: 600; background: var(--bg-elevated);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.preflight {
+  display: flex; flex-wrap: wrap; gap: 14px;
+  padding: 8px 16px; border-bottom: 1px solid var(--border);
+  background: var(--bg-canvas); font-size: 12px; flex-shrink: 0;
+}
+.pf { color: var(--text-muted); }
+.pf.ok { color: var(--pass); }
+.pf.ok::before { content: "[ok] "; }
+.pf.warn { color: var(--qualified); }
+.pf.warn::before { content: "[warn] "; }
+.layout {
+  display: grid;
+  grid-template-columns: var(--rail-w, 260px) 1fr var(--lib-w, 200px);
+  flex: 1; min-height: 0;
+  --rail-w: 260px; --lib-w: 200px; --panel-collapsed-w: 7.5rem;
+}
+.layout.rail-collapsed { --rail-w: var(--panel-collapsed-w); }
+.layout.lib-collapsed { --lib-w: var(--panel-collapsed-w); }
+.rail, .library {
+  padding: 0; background: var(--bg-panel); min-width: 0;
+  display: flex; flex-direction: column; overflow: auto;
+}
+.rail { border-right: 1px solid var(--border); }
+.library { border-left: 1px solid var(--border); }
+.cockpit { padding: 14px; background: var(--bg-canvas); overflow: auto; }
+.panel-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  padding: 12px 10px 10px 12px; border-bottom: 1px solid transparent; flex-shrink: 0;
+}
+.layout.rail-collapsed .rail .panel-head,
+.layout.lib-collapsed .library .panel-head {
+  border-bottom-color: var(--border);
+  flex-direction: column; align-items: stretch; gap: 8px; padding: 12px 8px;
+}
+.region-h {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--text-muted); margin: 0; white-space: nowrap;
+}
+.panel-toggle {
+  flex-shrink: 0; width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--border); background: var(--bg-elevated);
+  color: var(--text-muted); border-radius: var(--radius-md);
+  cursor: pointer; padding: 0;
+}
+.panel-toggle:hover { color: var(--text); border-color: var(--accent); }
+.panel-toggle svg { width: 14px; height: 14px; display: block; }
+.panel-toggle .pane-fill { fill: currentColor; }
+.panel-toggle[aria-expanded="false"] .pane-fill { fill: none; }
+.panel-body { padding: 4px 14px 14px; flex: 1; min-height: 0; }
+.panel-body--compact { display: none; }
+.layout.rail-collapsed .rail .panel-body--full,
+.layout.lib-collapsed .library .panel-body--full { display: none; }
+.layout.rail-collapsed .rail .panel-body--compact,
+.layout.lib-collapsed .library .panel-body--compact {
+  display: flex; flex-direction: column; gap: 8px; padding: 10px 8px 14px; align-items: stretch;
+}
+.compact-card {
+  border: 1px solid var(--border); background: var(--bg-elevated);
+  border-radius: var(--radius-md); padding: 8px; font-size: 10px;
+  line-height: 1.35; text-align: center;
+}
+.compact-card .k {
+  display: block; color: var(--text-muted); text-transform: uppercase;
+  letter-spacing: 0.06em; font-size: 9px; margin-bottom: 4px;
+}
+.compact-card .v { display: block; word-break: break-word; font-weight: 500; color: var(--text); }
+.btn {
+  font-family: var(--font-mono); font-size: 12px; font-weight: 500;
+  border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text);
+  padding: 8px 12px; border-radius: var(--radius-md); cursor: pointer;
+}
+.btn:hover { border-color: var(--accent); }
+.btn.primary {
+  background: var(--accent); border-color: var(--accent); color: #14110E; font-weight: 600;
+}
+.btn .kbd { margin-left: 8px; opacity: 0.7; font-size: 10px; }
+.compact-run { width: 100%; justify-content: center; padding-left: 6px; padding-right: 6px; }
+.compact-run .kbd { display: none; }
+.compact-blank {
+  flex: 1; min-height: 48px; border: 1px dashed var(--border); border-radius: var(--radius-md);
+  color: var(--text-muted); font-size: 10px; display: flex; align-items: center;
+  justify-content: center; text-align: center; padding: 8px; line-height: 1.3;
+}
+.field-label { display: block; font-size: 11px; color: var(--text-muted); margin: 10px 0 4px; }
+.field {
+  border: 1px solid var(--border); background: var(--bg-elevated);
+  padding: 8px 10px; border-radius: var(--radius-md); font-size: 12px;
+}
+.field.selected {
+  border-color: var(--selection);
+  box-shadow: inset 2px 0 0 var(--selection);
+}
+.disclaimer {
+  background: var(--disclaimer-bg); border: 1px solid var(--border);
+  border-left: 2px solid var(--selection); padding: 10px 12px; font-size: 11px;
+  line-height: 1.45; margin-bottom: 12px; border-radius: var(--radius-sm);
+}
+.finding-card {
+  border: 1px solid var(--border); background: var(--bg-elevated);
+  padding: 14px; border-radius: var(--radius-md); margin-bottom: 12px;
+}
+.finding-card.settle { animation: findingSettle 250ms ease-out; }
+@keyframes findingSettle {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.finding-card .big {
+  font-family: var(--font-display); font-size: 28px; font-weight: 700; letter-spacing: -0.02em;
+}
+.finding-card .sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+.pillars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.pillar {
+  border: 1px solid var(--border); background: var(--bg-panel);
+  padding: 10px; border-radius: var(--radius-md); font-size: 12px;
+}
+.pillar strong { display: block; margin-bottom: 4px; font-weight: 600; }
+.chip-status {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: 6px 10px; font-size: 12px; background: var(--bg-elevated);
+}
+.dot { width: 7px; height: 7px; border-radius: 50%; }
+.dot.pass { background: var(--pass); }
+.dot.fail { background: var(--fail); }
+.dot.qualified { background: var(--qualified); }
+.well {
+  background: var(--well); border: 1px solid var(--border);
+  border-left: 2px solid var(--accent); border-radius: var(--radius-sm);
+  padding: 8px 10px; font-size: 12px; line-height: 1.45;
+}
+.well .row {
+  display: grid; grid-template-columns: 120px 1fr auto; gap: 8px;
+  align-items: baseline; padding: 3px 0;
+}
+.well .noun { color: var(--text-muted); }
+.well .val { color: var(--text); word-break: break-all; }
+.well .act {
+  color: var(--accent); font-size: 11px; cursor: pointer;
+  border: none; background: none; font-family: inherit;
+}
+.integrity-label {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--text-muted); margin: 0 0 6px;
+}
+.occ-nav { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.occ-nav button {
+  font-family: var(--font-mono); font-size: 11px;
+  border: 1px solid var(--border); background: var(--bg-panel);
+  color: var(--text-muted); padding: 4px 8px; border-radius: var(--radius-sm); cursor: pointer;
+}
+.occ-nav button.active { color: var(--text); border-color: var(--accent); }
+.run {
+  border: 1px solid var(--border); padding: 8px; margin-bottom: 6px;
+  border-radius: var(--radius-md); font-size: 11px; cursor: pointer; background: var(--bg-elevated);
+}
+.run.active { border-color: var(--selection); box-shadow: inset 2px 0 0 var(--selection); }
+.run .id { color: var(--text-muted); font-size: 10px; margin-top: 2px; }
+.chain { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.seg {
+  border: 1px solid var(--border); padding: 4px 8px; border-radius: var(--radius-sm);
+  font-size: 11px; background: var(--bg-panel);
+}
+.seg.pass { border-color: var(--pass); color: var(--pass); }
+.keymap {
+  flex-shrink: 0; border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+  backdrop-filter: blur(8px); padding: 10px 14px;
+  font-size: 11px; color: var(--text-muted);
+  display: flex; flex-wrap: wrap; gap: 12px 18px;
+}
+.keymap kbd {
+  font-family: var(--font-mono); border: 1px solid var(--border);
+  background: var(--bg-elevated); color: var(--text);
+  padding: 1px 5px; border-radius: 2px; font-size: 10px;
+}
+.hidden { display: none !important; }
+.toast {
+  position: fixed; right: 16px; bottom: 56px;
+  background: var(--bg-elevated); border: 1px solid var(--accent);
+  color: var(--text); padding: 8px 12px; border-radius: var(--radius-md);
+  font-size: 12px; opacity: 0; pointer-events: none; transition: opacity 150ms ease; z-index: 50;
+}
+.toast.show { opacity: 1; }
+@media (max-width: 960px) {
+  .layout { grid-template-columns: 1fr; }
+  .library { border-left: none !important; border-top: 1px solid var(--border); }
+  .rail { border-right: none !important; border-bottom: 1px solid var(--border); }
+  .pillars { grid-template-columns: 1fr; }
+}
+
+/* ===== Variant A: Finding Dominates ===== */
+[data-variant="A"] .finding-card {
+  padding: 20px 18px; margin-bottom: 10px;
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+[data-variant="A"] .finding-card .big { font-size: 40px; line-height: 1.05; }
+[data-variant="A"] .pillars { margin-bottom: 10px; }
+[data-variant="A"] .cockpit .region-h { display: none; }
+[data-variant="A"] .preflight { padding: 6px 16px; opacity: 0.85; }
+[data-variant="A"] .shell-header { padding: 10px 16px; }
+[data-variant="A"] .shell-brand { font-size: 20px; }
+[data-variant="A"] .integrity-label { margin-top: 2px; }
+
+/* ===== Variant B: Proof Strip First ===== */
+[data-variant="B"] .preflight {
+  padding: 12px 16px; gap: 18px;
+  border-bottom-width: 2px; border-bottom-color: var(--border);
+  background: color-mix(in srgb, var(--bg-canvas) 80%, var(--bg-elevated));
+}
+[data-variant="B"] .proof-strip {
+  display: block;
+  background: var(--well);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+[data-variant="B"] .proof-strip .strip-h {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--accent); margin-bottom: 8px; font-weight: 600;
+}
+[data-variant="B"] .proof-strip .strip-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+}
+[data-variant="B"] .proof-strip .k { color: var(--text-muted); font-size: 10px; display: block; margin-bottom: 2px; }
+[data-variant="B"] .proof-strip .v { font-weight: 500; font-size: 12px; word-break: break-all; }
+[data-variant="B"] .finding-card .big { font-size: 24px; }
+[data-variant="B"] .finding-card { margin-top: 0; }
+[data-variant="B"] .rail, [data-variant="B"] .library {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 60%, transparent);
+}
+[data-variant="B"] .panel-head {
+  background: color-mix(in srgb, var(--bg-elevated) 50%, var(--bg-panel));
+  border-bottom-color: var(--border);
+}
+
+/* ===== Variant C: Dual-stage Instrument ===== */
+[data-variant="C"] .cockpit {
+  display: flex; flex-direction: column; gap: 0; padding: 0;
+}
+[data-variant="C"] .stage-upper {
+  padding: 14px 14px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-canvas);
+}
+[data-variant="C"] .stage-lower {
+  padding: 12px 14px 16px;
+  background: color-mix(in srgb, var(--bg-elevated) 35%, var(--bg-canvas));
+  flex: 1;
+}
+[data-variant="C"] .stage-lower .stage-label {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--accent); margin: 0 0 10px; font-weight: 600;
+}
+[data-variant="C"] .finding-card .big { font-size: 28px; }
+[data-variant="C"] .proof-deck {
+  display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px; align-items: start;
+}
+@media (max-width: 900px) {
+  [data-variant="C"] .proof-deck { grid-template-columns: 1fr; }
+  [data-variant="B"] .proof-strip .strip-grid { grid-template-columns: 1fr; }
+}
+[data-variant="C"] .chain { margin-top: 0; }
+[data-variant="C"] .shell-brand { font-size: 22px; }
+
+/* Remix: A finding accent border; padding locked to shotgun C.
+   Copper (--accent) = proof/finding focal. Cool slate (--selection) = Controls preset + Run library active + disclaimer left edge. */
+[data-variant="C"] .finding-card {
+  padding: 14px;
+  margin-bottom: 12px;
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-left: 2px solid var(--accent);
+}
+
+</style>
+<!-- design-html: pretext.js vendored alongside for long-form report body later.
+     Finding/disclaimer use shotgun C′ CSS flow — Pretext height pinning caused awkward finding header spacing. -->
+</head>
+<body>
+  
+  <div class="app">
+    <div class="shell">
+      <div class="shell-header">
+        <div class="shell-brand">Evidence Workbench</div>
+        <div class="shell-meta">local · review-support only · not a compliance determination</div>
+      </div>
+      <div class="shell-tabs" role="tablist">
+        <button class="shell-tab active" role="tab" data-home="generator" type="button">Home: Generator Console (synth-fin)</button>
+        <button class="shell-tab" role="tab" data-home="validation" type="button">Home: Validation Review (ai-mrg-bench)</button>
+      </div>
+      <div class="preflight" aria-live="polite">
+        <span class="pf ok">uv/python import</span>
+        <span class="pf ok">runs root writable</span>
+        <span class="pf ok">seed/copula</span>
+        <span class="pf ok">LFS (n/a Generator · ok Validation)</span>
+      </div>
+
+      <div class="layout home lib-collapsed" id="home-generator" data-home="generator">
+        
+          <aside class="rail" aria-label="Controls">
+            <div class="panel-head">
+              <h3 class="region-h">Controls</h3>
+              <button class="panel-toggle" type="button" data-panel="rail" aria-expanded="true" title="Toggle Controls" aria-label="Toggle Controls">
+                <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="1.5" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.25"/><line x1="5.5" y1="1.5" x2="5.5" y2="14.5" stroke="currentColor" stroke-width="1.25"/><rect class="pane-fill" x="1.5" y="1.5" width="4" height="13"/></svg>
+              </button>
+            </div>
+            
+            <div class="panel-body panel-body--full">
+              <label class="field-label">Preset</label>
+              <div class="field selected">bias_demo_1k · n=1000 · seed=42</div>
+              <label class="field-label">Scenario</label>
+              <div class="field">base</div>
+              <label class="field-label">Bias profile</label>
+              <div class="field">proxy_discrimination_mild</div>
+              <label class="field-label">n / seed</label>
+              <div class="field">1000 / 42</div>
+              <div style="margin-top:14px;display:flex;flex-wrap:wrap;gap:8px">
+                <button class="btn primary" type="button" data-action="run">Run demo<span class="kbd">r</span></button>
+                <button class="btn" type="button">Open report</button>
+              </div>
+            </div>
+            <div class="panel-body panel-body--compact" aria-label="Controls summary">
+              <div class="compact-card"><span class="k">Preset</span><span class="v">bias_demo_1k</span></div>
+              <button class="btn primary compact-run" type="button" data-action="run">Run</button>
+              <div class="compact-blank">Full form hidden — expand Controls</div>
+            </div>
+          </aside>
+        <main class="cockpit">
+            <div class="stage-upper"><div class="disclaimer">Non-certification disclaimer (persistent): analytical / review-support only. Does not constitute legal advice or a determination of compliance.</div><div class="finding-card settle"><div class="big">Subgroup gap +7.6pp</div><div class="sub">Bottom quartile 3.2% → top quartile 10.8% (manifest ground truth)</div></div><div class="pillars">
+              <div class="pillar"><strong>Privacy</strong><span class="chip-status" style="margin-top:6px"><span class="dot pass"></span>pass</span></div>
+              <div class="pillar"><strong>Utility</strong><span class="chip-status" style="margin-top:6px"><span class="dot qualified"></span>qualified</span></div>
+              <div class="pillar"><strong>Fidelity</strong><span class="chip-status" style="margin-top:6px"><span class="dot pass"></span>pass</span></div>
+            </div></div>
+            <div class="stage-lower">
+              <p class="stage-label">Proof deck · integrity</p>
+              <div class="proof-deck"><div class="well">
+              <div class="row"><span class="noun">ground_truth</span><span class="val">bias.apply · proxy_discrimination_mild · seed 42</span><span></span></div>
+              <div class="row"><span class="noun">config_hash</span><span class="val">sf_a1b2c3d4…e5f6</span><button class="act" type="button" data-copy="sf_a1b2c3d4e5f6">Copy</button></div>
+              <div class="row"><span class="noun">run_id</span><span class="val">20260725T221530Z-a1b2c3d4</span><button class="act" type="button" data-copy="20260725T221530Z-a1b2c3d4">Copy</button></div>
+            </div><div><p class="integrity-label">Manifest note</p><p style="font-size:12px;color:var(--text-muted);margin:0">Slice B expands full audit timeline. Charts stay last.</p></div></div>
+            </div>
+          </main>
+        
+          <aside class="library" aria-label="Run library">
+            <div class="panel-head">
+              <h3 class="region-h">Run library</h3>
+              <button class="panel-toggle" type="button" data-panel="library" aria-expanded="false" title="Toggle Run library" aria-label="Toggle Run library">
+                <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="1.5" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.25"/><line x1="10.5" y1="1.5" x2="10.5" y2="14.5" stroke="currentColor" stroke-width="1.25"/><rect class="pane-fill" x="10.5" y="1.5" width="4" height="13"/></svg>
+              </button>
+            </div>
+            <div class="panel-body panel-body--full">
+              <div class="run active">bias mild · n=1000<div class="id">20260725T221530Z-a1b2c3d4</div></div>
+              <div class="run">base · n=1000<div class="id">20260724T140112Z-91fe22aa</div></div>
+              <div class="run" style="opacity:0.55;border-style:dashed">Compare… · Slice C</div></div>
+            <div class="panel-body panel-body--compact" aria-label="Run library summary">
+              <div class="compact-card"><span class="k">Active</span><span class="v">a1b2c3d4</span></div>
+              <div class="compact-card"><span class="k">Runs</span><span class="v">2 stored</span></div>
+              <div class="compact-blank">List hidden — expand Run library</div></div>
+          </aside>
+      </div>
+
+      <div class="layout home lib-collapsed hidden" id="home-validation" data-home="validation">
+        
+          <aside class="rail" aria-label="Controls">
+            <div class="panel-head">
+              <h3 class="region-h">Controls</h3>
+              <button class="panel-toggle" type="button" data-panel="rail" aria-expanded="true" title="Toggle Controls" aria-label="Toggle Controls">
+                <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="1.5" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.25"/><line x1="5.5" y1="1.5" x2="5.5" y2="14.5" stroke="currentColor" stroke-width="1.25"/><rect class="pane-fill" x="1.5" y="1.5" width="4" height="13"/></svg>
+              </button>
+            </div>
+            
+            <div class="panel-body panel-body--full">
+              <label class="field-label">Preset</label>
+              <div class="field selected">gc_full · german_credit_full.yaml</div>
+              <label class="field-label">Also available</label>
+              <div class="field">gc_ca_overlay</div>
+              <div class="field" style="margin-top:6px">cre_p5 (committed fixture)</div>
+              <div style="margin-top:14px;display:flex;flex-wrap:wrap;gap:8px">
+                <button class="btn primary" type="button" data-action="run">Run<span class="kbd">r</span></button>
+                <button class="btn" type="button" data-action="verify">Re-verify<span class="kbd">v</span></button>
+              </div>
+            </div>
+            <div class="panel-body panel-body--compact" aria-label="Controls summary">
+              <div class="compact-card"><span class="k">Preset</span><span class="v">gc_full</span></div>
+              <button class="btn primary compact-run" type="button" data-action="run">Run</button>
+              <button class="btn compact-run" type="button" data-action="verify">Verify</button>
+              <div class="compact-blank">Full form hidden — expand Controls</div>
+            </div>
+          </aside>
+        <main class="cockpit">
+            <div class="stage-upper"><div class="disclaimer"><strong>§I Disclaimer</strong> — review-support only; not a compliance determination.<br/><strong>§II Limitations</strong> — German Credit demo scope; surrogate methods and fixture assumptions apply.</div><div class="finding-card settle"><div class="big">Adverse impact flagged on age band</div><div class="sub">Pillar view · OCC seven-section report below</div></div><div class="occ-nav" aria-label="OCC sections">
+              <button type="button" class="active">§I</button><button type="button">§II</button><button type="button">§III</button>
+              <button type="button">§IV</button><button type="button">§V</button><button type="button">§VI</button><button type="button">§VII</button>
+            </div></div>
+            <div class="stage-lower">
+              <p class="stage-label">Proof deck · verify-chain</p>
+              <div class="proof-deck"><div class="well">
+              <div class="row"><span class="noun">verify</span><span class="val">PASS · 12 events · chain intact</span><button class="act" type="button" data-action="verify">Re-verify</button></div>
+              <div class="row"><span class="noun">audit_db</span><span class="val">workbench.db · event head 0x9f3a…</span><button class="act" type="button" data-copy="0x9f3a">Copy</button></div>
+            </div><div class="chain" aria-label="Verify chain">
+              <span class="seg pass">init</span><span class="seg pass">fixtures</span><span class="seg pass">validate</span>
+              <span class="seg pass">report</span><span class="seg pass">seal</span>
+            </div></div>
+            </div>
+          </main>
+        
+          <aside class="library" aria-label="Run library">
+            <div class="panel-head">
+              <h3 class="region-h">Run library</h3>
+              <button class="panel-toggle" type="button" data-panel="library" aria-expanded="false" title="Toggle Run library" aria-label="Toggle Run library">
+                <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="1.5" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.25"/><line x1="10.5" y1="1.5" x2="10.5" y2="14.5" stroke="currentColor" stroke-width="1.25"/><rect class="pane-fill" x="10.5" y="1.5" width="4" height="13"/></svg>
+              </button>
+            </div>
+            <div class="panel-body panel-body--full">
+              <div class="run active">gc_full · ok<div class="id">20260725T180011Z-bb12cd34</div></div>
+              <div class="run">cre_p5 · ok<div class="id">20260722T091200Z-77aa01ef</div></div></div>
+            <div class="panel-body panel-body--compact" aria-label="Run library summary">
+              <div class="compact-card"><span class="k">Active</span><span class="v">bb12cd34</span></div>
+              <div class="compact-card"><span class="k">Runs</span><span class="v">2 stored</span></div>
+              <div class="compact-blank">List hidden — expand Run library</div></div>
+          </aside>
+      </div>
+    </div>
+    <div class="keymap" title="Keyboard-parity legend">
+      <span style="opacity:0.75">finalized · C′</span>
+      <button class="btn" type="button" id="themeToggle" style="padding:4px 8px;font-size:11px">Theme</button>
+      <span><kbd>1</kbd> Generator</span>
+      <span><kbd>2</kbd> Validation</span>
+      <span><kbd>[</kbd> Controls</span>
+      <span><kbd>]</kbd> Run library</span>
+      <span><kbd>r</kbd> Run</span>
+      <span><kbd>v</kbd> Re-verify</span>
+      <span><kbd>c</kbd> Copy hash</span>
+      <span><kbd>t</kbd> Theme</span>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+  <script>
+(function(){
+  const toast = document.getElementById('toast');
+  function showToast(msg){
+    toast.textContent = msg; toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 1400);
+  }
+  function setHome(home){
+    document.querySelectorAll('.home').forEach(el => el.classList.toggle('hidden', el.dataset.home !== home));
+    document.querySelectorAll('.shell-tab').forEach(t => t.classList.toggle('active', t.dataset.home === home));
+  }
+  document.querySelectorAll('.shell-tab').forEach(tab => {
+    tab.addEventListener('click', () => setHome(tab.dataset.home));
+  });
+  document.querySelectorAll('.panel-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const layout = btn.closest('.layout');
+      const panel = btn.dataset.panel;
+      const cls = panel === 'rail' ? 'rail-collapsed' : 'lib-collapsed';
+      const collapsed = layout.classList.toggle(cls);
+      btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    });
+  });
+  document.getElementById('themeToggle')?.addEventListener('click', () => {
+    const html = document.documentElement;
+    html.setAttribute('data-theme', html.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
+  });
+  document.querySelectorAll('[data-copy]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      navigator.clipboard?.writeText(btn.dataset.copy || '').then(() => showToast('Copied ' + (btn.dataset.copy||'').slice(0,12)));
+    });
+  });
+  document.querySelectorAll('[data-action="run"]').forEach(b => b.addEventListener('click', () => showToast('Run (demo)')));
+  document.querySelectorAll('[data-action="verify"]').forEach(b => b.addEventListener('click', () => showToast('Re-verify')));
+  document.querySelectorAll('.occ-nav button').forEach(b => {
+    b.addEventListener('click', () => {
+      b.parentElement.querySelectorAll('button').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+    });
+  });
+  window.addEventListener('keydown', (e) => {
+    if (e.target.matches('input,textarea')) return;
+    const k = e.key.toLowerCase();
+    if (k === '1') setHome('generator');
+    if (k === '2') setHome('validation');
+    if (k === '[') document.querySelector('#home-generator:not(.hidden) .panel-toggle[data-panel="rail"], #home-validation:not(.hidden) .panel-toggle[data-panel="rail"]')?.click();
+    if (k === ']') document.querySelector('#home-generator:not(.hidden) .panel-toggle[data-panel="library"], #home-validation:not(.hidden) .panel-toggle[data-panel="library"]')?.click();
+    if (k === 'r') showToast('Run (demo)');
+    if (k === 'v') showToast('Re-verify');
+    if (k === 't') document.getElementById('themeToggle')?.click();
+  });
+})();
+</script>
+</body>
+</html>
