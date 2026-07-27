@@ -186,7 +186,7 @@ export default function App() {
   const [inspect, setInspect] = useState<InspectPayload | null>(null)
   const [compareSelection, setCompareSelection] = useState<string[]>([])
   const [compare, setCompare] = useState<ComparePayload | null>(null)
-  const [libGuideOpen, setLibGuideOpen] = useState(false)
+  const [libGuideOpen, setLibGuideOpen] = useState(true)
 
   const showToast = useCallback((m: string) => {
     setToast(m)
@@ -867,13 +867,34 @@ export default function App() {
                   type="button"
                   className="library-instructions-toggle"
                   aria-expanded={libGuideOpen}
+                  aria-controls="library-instructions-body"
                   data-testid="library-instructions-toggle"
                   onClick={() => setLibGuideOpen((v) => !v)}
                 >
-                  Instructions
+                  <svg
+                    className="library-instructions-chevron"
+                    viewBox="0 0 16 16"
+                    aria-hidden="true"
+                    data-expanded={libGuideOpen ? 'true' : 'false'}
+                  >
+                    <path
+                      d="M4 6l4 4 4-4"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  <span className="library-instructions-label">Instructions</span>
+                  <span className="library-instructions-action">{libGuideOpen ? 'Hide' : 'Show'}</span>
                 </button>
                 {libGuideOpen && (
-                  <div className="library-instructions-body" data-testid="library-instructions-body">
+                  <div
+                    className="library-instructions-body"
+                    id="library-instructions-body"
+                    data-testid="library-instructions-body"
+                  >
                     <p>
                       <strong>Click</strong> — reopen run (finding, timeline, inspect, report embed)
                     </p>
