@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import {
   cancelRun,
   fetchInspect,
@@ -99,11 +99,66 @@ function formatInspectValue(value: unknown): string {
   }
 }
 
+const RAIL_DEFAULT = 260
+const LIB_DEFAULT = 200
+const RAIL_MIN = 200
+const RAIL_MAX = 480
+const LIB_MIN = 160
+const LIB_MAX = 420
+const COCKPIT_MIN = 320
+
+function readStoredWidth(key: string, fallback: number): number {
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return fallback
+    const n = Number(raw)
+    return Number.isFinite(n) ? n : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function PanelResizer({
+  side,
+  onDrag,
+}: {
+  side: 'rail' | 'library'
+  onDrag: (clientX: number) => void
+}) {
+  return (
+    <div
+      className={`panel-resizer panel-resizer--${side}`}
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={side === 'rail' ? 'Resize Controls panel' : 'Resize Run library panel'}
+      onPointerDown={(ev) => {
+        ev.preventDefault()
+        const target = ev.currentTarget
+        target.setPointerCapture(ev.pointerId)
+        const move = (e: PointerEvent) => onDrag(e.clientX)
+        const up = (e: PointerEvent) => {
+          target.releasePointerCapture(e.pointerId)
+          target.removeEventListener('pointermove', move)
+          target.removeEventListener('pointerup', up)
+          target.removeEventListener('pointercancel', up)
+          document.body.classList.remove('is-panel-resizing')
+        }
+        document.body.classList.add('is-panel-resizing')
+        target.addEventListener('pointermove', move)
+        target.addEventListener('pointerup', up)
+        target.addEventListener('pointercancel', up)
+      }}
+    />
+  )
+}
+
 export default function App() {
   const [home, setHome] = useState<Home>(homeFromUrl)
   const [theme, setTheme] = useState<'dark' | 'light'>('dark')
   const [railOpen, setRailOpen] = useState(true)
   const [libOpen, setLibOpen] = useState(false)
+  const [railW, setRailW] = useState(() => readStoredWidth('ew.railW', RAIL_DEFAULT))
+  const [libW, setLibW] = useState(() => readStoredWidth('ew.libW', LIB_DEFAULT))
   const [checks, setChecks] = useState<PreflightCheck[]>([])
   const [canRun, setCanRun] = useState(false)
   const [presets, setPresets] = useState<Preset[]>([])
@@ -266,6 +321,41 @@ export default function App() {
     .filter(Boolean)
     .join(' ')
 
+  const layoutStyle = {
+    ...(railOpen ? ({ ['--rail-w']: `${railW}px` } as CSSProperties) : {}),
+    ...(libOpen ? ({ ['--lib-w']: `${libW}px` } as CSSProperties) : {}),
+  }
+
+  const onResizeRail = useCallback((clientX: number) => {
+    const layout = document.querySelector('.layout')
+    if (!layout) return
+    const rect = layout.getBoundingClientRect()
+    const libPx = libOpen ? libW : 120
+    const max = Math.min(RAIL_MAX, Math.floor(rect.width - libPx - COCKPIT_MIN))
+    const next = Math.max(RAIL_MIN, Math.min(max, Math.round(clientX - rect.left)))
+    setRailW(next)
+    try {
+      localStorage.setItem('ew.railW', String(next))
+    } catch {
+      /* ignore */
+    }
+  }, [libOpen, libW])
+
+  const onResizeLib = useCallback((clientX: number) => {
+    const layout = document.querySelector('.layout')
+    if (!layout) return
+    const rect = layout.getBoundingClientRect()
+    const railPx = railOpen ? railW : 120
+    const max = Math.min(LIB_MAX, Math.floor(rect.width - railPx - COCKPIT_MIN))
+    const next = Math.max(LIB_MIN, Math.min(max, Math.round(rect.right - clientX)))
+    setLibW(next)
+    try {
+      localStorage.setItem('ew.libW', String(next))
+    } catch {
+      /* ignore */
+    }
+  }, [railOpen, railW])
+
   const reportSrc = active?.run_id && active.primary_report && !active.artifacts_missing
     ? `/api/runs/${active.run_id}/report`
     : null
@@ -315,7 +405,7 @@ export default function App() {
           ))}
         </div>
 
-        <div className={layoutClass} data-home={home}>
+        <div className={layoutClass} data-home={home} style={layoutStyle}>
           <aside className="rail" aria-label="Controls">
             <div className="panel-head">
               <h3 className="region-h">Controls</h3>
@@ -328,7 +418,6 @@ export default function App() {
                   key={p.id}
                   type="button"
                   className={`field${presetId === p.id ? ' selected' : ''}`}
-                  style={{ display: 'block', width: '100%', textAlign: 'left', marginBottom: 6, cursor: 'pointer' }}
                   onClick={() => setPresetId(p.id)}
                 >
                   {p.summary || p.id}
@@ -406,6 +495,7 @@ export default function App() {
               </button>
               <div className="compact-blank">Full form hidden — expand Controls</div>
             </div>
+            {railOpen && <PanelResizer side="rail" onDrag={onResizeRail} />}
           </aside>
 
           <main className="cockpit">
@@ -675,6 +765,7 @@ export default function App() {
                 <span className="v">{library.length}</span>
               </div>
             </div>
+            {libOpen && <PanelResizer side="library" onDrag={onResizeLib} />}
           </aside>
         </div>
 

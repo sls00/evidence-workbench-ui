@@ -116,10 +116,36 @@ body {
 .layout.lib-collapsed { --lib-w: var(--panel-collapsed-w); }
 .rail, .library {
   padding: 0; background: var(--bg-panel); min-width: 0;
-  display: flex; flex-direction: column; overflow: auto;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  position: relative;
 }
 .rail { border-right: 1px solid var(--border); }
 .library { border-left: 1px solid var(--border); }
+.panel-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  z-index: 6;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+}
+.panel-resizer--rail { right: -4px; }
+.panel-resizer--library { left: -4px; }
+.panel-resizer:hover,
+.panel-resizer:focus-visible,
+body.is-panel-resizing .panel-resizer {
+  background: color-mix(in srgb, var(--selection) 45%, transparent);
+}
+body.is-panel-resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+body.is-panel-resizing iframe {
+  pointer-events: none;
+}
 .cockpit { padding: 14px; background: var(--bg-canvas); overflow: auto; }
 .panel-head {
   display: flex; align-items: center; justify-content: space-between; gap: 6px;
@@ -146,6 +172,11 @@ body {
 .panel-toggle .pane-fill { fill: currentColor; }
 .panel-toggle[aria-expanded="false"] .pane-fill { fill: none; }
 .panel-body { padding: 4px 14px 14px; flex: 1; min-height: 0; }
+.rail .panel-body--full,
+.library .panel-body--full {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
 .panel-body--compact { display: none; }
 .layout.rail-collapsed .rail .panel-body--full,
 .layout.lib-collapsed .library .panel-body--full { display: none; }
@@ -183,11 +214,30 @@ body {
 .field-label { display: block; font-size: 11px; color: var(--text-muted); margin: 10px 0 4px; }
 .field {
   border: 1px solid var(--border); background: var(--bg-elevated);
+  color: var(--text); /* buttons must not use UA ButtonText (black) in dark mode */
+  font-family: inherit;
   padding: 8px 10px; border-radius: var(--radius-md); font-size: 12px;
+  max-width: 100%;
+  box-sizing: border-box;
+  white-space: normal; /* UA buttons default to nowrap */
+  overflow-wrap: anywhere; /* long paths like configs/….yaml */
+  word-break: break-word;
+  line-height: 1.35;
+}
+button.field {
+  display: block;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  margin-bottom: 6px;
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .field.selected {
   border-color: var(--selection);
   box-shadow: inset 2px 0 0 var(--selection);
+  color: var(--text);
 }
 .disclaimer {
   background: var(--disclaimer-bg); border: 1px solid var(--border);
@@ -250,9 +300,17 @@ body {
 .occ-nav button.active { color: var(--text); border-color: var(--accent); }
 .run {
   border: 1px solid var(--border); padding: 8px; margin-bottom: 6px;
-  border-radius: var(--radius-md); font-size: 11px; cursor: pointer; background: var(--bg-elevated);
+  border-radius: var(--radius-md); font-size: 11px; cursor: pointer;
+  background: var(--bg-elevated);
+  color: var(--text); /* buttons must not use UA ButtonText (black) in dark mode */
+  font-family: inherit;
+  text-align: left;
 }
-.run.active { border-color: var(--selection); box-shadow: inset 2px 0 0 var(--selection); }
+.run.active {
+  border-color: var(--selection);
+  box-shadow: inset 2px 0 0 var(--selection);
+  color: var(--text);
+}
 .run .id { color: var(--text-muted); font-size: 10px; margin-top: 2px; }
 .chain { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .seg {
