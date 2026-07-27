@@ -8,6 +8,7 @@ Flow (ASCII):
   GET  /api/runs/{id}/report ──HTML or markdown-wrapped HTML (allowlisted)
   GET  /api/runs/{id}/timeline ──post-run manifest/audit events
   GET  /api/runs/{id}/inspect ──allowlisted metric panes
+  GET  /api/runs/compare ──same-home JSON textual diff (Slice C)
 """
 
 from __future__ import annotations
@@ -105,6 +106,47 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ) from exc
         return {"status": "accepted", "run_id": active.run_id, "home": active.home}
 
+    @app.get("/api/runs")
+    def list_runs(home: Home = Query(...)) -> dict[str, Any]:
+        orch: Orchestrator = app.state.orch
+        return orch.list_runs(home)
+
+    @app.get("/api/runs/compare")
+    def compare_runs(
+        home: Home = Query(...),
+        left: str = Query(..., min_length=1),
+        right: str = Query(..., min_length=1),
+    ) -> dict[str, Any]:
+        orch: Orchestrator = app.state.orch
+        try:
+            return orch.compare(home, left, right)
+        except KeyError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": {"code": "not_found", "message": f"run {exc.args[0]} not found", "hint": ""}},
+            ) from exc
+        except ValueError as exc:
+            code = str(exc)
+            messages = {
+                "same_run": "Cannot compare a run to itself",
+                "cross_home": "Compare is same-home only — pick two runs from one namespace",
+            }
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": {
+                        "code": code,
+                        "message": messages.get(code, str(exc)),
+                        "hint": "Use two distinct runs from the same home",
+                    }
+                },
+            ) from exc
+        except PermissionError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": {"code": "path_traversal", "message": str(exc), "hint": ""}},
+            ) from exc
+
     @app.get("/api/runs/{run_id}")
     def get_run(run_id: str) -> dict[str, Any]:
         orch: Orchestrator = app.state.orch
@@ -126,11 +168,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return orch.cancel(run_id)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail={"error": {"code": "not_found", "message": str(run_id), "hint": ""}}) from exc
-
-    @app.get("/api/runs")
-    def list_runs(home: Home = Query(...)) -> dict[str, Any]:
-        orch: Orchestrator = app.state.orch
-        return orch.list_runs(home)
 
     @app.get("/api/runs/{run_id}/report", response_model=None)
     def get_report(run_id: str):

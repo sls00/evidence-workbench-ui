@@ -19,21 +19,15 @@ Source plan: `~/.gstack/projects/portfolio/sls00-evidence-workbench-eng-review-2
 **Depends on:** SDK stage-event design in `synth-fin` / `workbench`; Slice A runners stable  
 **Blocked by:** No stage-event API in engines today
 
-## Slice C
+## Completed
 
-### Same-home run compare
+### Same-home run compare (Slice C)
 
 **What:** Same-home compare of ≤2 runs: side-by-side config/preset + JSON textual diff of `validation.json` or `bias_battery_summary.json` + verify status — not pixel HTML diff.
 
-**Why:** Office-hours sequences compare as Slice C; workbench depth beyond reopen needs it for lasting adoptability after the hiring demo.
+**Why:** Office-hours Slice C workbench depth; library pick-two → compare pane in dual-stage chrome.
 
-**Context:** Slice A run library is reopen-only. Index + artifact dirs already carry `preset_id`, `config_hash`, and `extra` paths. UI: pick two rows in one namespace; show diff + verify chips. Do not invent cross-home compare. Visual chrome stays DESIGN.md / finalized composition.
-
-**Effort:** M  
-**Priority:** P3  
-**Depends on:** Slice A run library + index; Slice B inspect panes preferred but not strictly required
-
-## Completed
+**Shipped:** 2026-07-27 on `feat/slice-c`. API `GET /api/runs/compare`; library shift+select; Playwright golden path.
 
 ### Playwright golden-path E2E (Slice B1)
 

@@ -194,6 +194,18 @@ class FakeRunner:
 
     def _synth_artifacts(self, run_dir: Path) -> RunSnapshot:
         status = self.outcome if self.outcome in {"ok", "failed", "qualified"} else "ok"
+        bias_by_preset = {
+            "bias_demo_1k": {"subgroup_gap_pp": 7.6, "bottom_quartile_pct": 3.2, "top_quartile_pct": 10.8},
+            "base_1k": {"subgroup_gap_pp": 0.1, "bottom_quartile_pct": 2.5, "top_quartile_pct": 2.6},
+            "rate_shock_1k": {"subgroup_gap_pp": 4.2, "bottom_quartile_pct": 2.8, "top_quartile_pct": 7.1},
+        }
+        hash_by_preset = {
+            "bias_demo_1k": "sf_fake_biasdemo",
+            "base_1k": "sf_fake_base1k",
+            "rate_shock_1k": "sf_fake_rateshock",
+        }
+        bias = bias_by_preset.get(self._preset_id or "", bias_by_preset["bias_demo_1k"])
+        config_hash = hash_by_preset.get(self._preset_id or "", "sf_fake_deadbeef")
         validation = {
             "overall_state": {
                 "ok": "pass",
@@ -205,18 +217,14 @@ class FakeRunner:
                 "utility": {"state": "qualified_pass" if status == "qualified" else "pass"},
                 "fidelity": {"state": "fail" if status == "failed" else "pass"},
             },
-            "bias": {
-                "subgroup_gap_pp": 7.6,
-                "bottom_quartile_pct": 3.2,
-                "top_quartile_pct": 10.8,
-            },
+            "bias": bias,
         }
         (run_dir / "validation.json").write_text(json.dumps(validation, indent=2), encoding="utf-8")
         panel = run_dir / "panel"
         panel.mkdir(parents=True, exist_ok=True)
         (panel / "validation.json").write_text(json.dumps(validation, indent=2), encoding="utf-8")
         manifest = {
-            "config_hash": "sf_fake_deadbeef",
+            "config_hash": config_hash,
             "bias_profile": self._preset_id,
             "stages": [
                 {"stage": "cli.parse", "preset": self._preset_id},
@@ -249,9 +257,12 @@ class FakeRunner:
         ]
         return RunSnapshot(
             status=status,
-            finding_title="Subgroup gap +7.6pp" if status != "failed" else "Validation failed",
-            finding_subtitle="Bottom quartile 3.2% → top quartile 10.8% (manifest ground truth)",
-            config_hash="sf_fake_deadbeef",
+            finding_title=f"Subgroup gap +{bias['subgroup_gap_pp']}pp" if status != "failed" else "Validation failed",
+            finding_subtitle=(
+                f"Bottom quartile {bias['bottom_quartile_pct']}% → top quartile {bias['top_quartile_pct']}% "
+                "(manifest ground truth)"
+            ),
+            config_hash=config_hash,
             primary_report=str(report),
             pillars=pillars,
             extra={
@@ -262,6 +273,18 @@ class FakeRunner:
 
     def _bench_artifacts(self, run_dir: Path) -> RunSnapshot:
         status = self.outcome if self.outcome in {"ok", "failed", "qualified"} else "ok"
+        battery_by_preset = {
+            "gc_full": {"protected_attribute": "sex", "reference_group": "male", "run_id": "fake-gc-full"},
+            "gc_ca_overlay": {"protected_attribute": "sex", "reference_group": "female", "run_id": "fake-gc-ca"},
+            "cre_p5": {"protected_attribute": "region", "reference_group": "urban", "run_id": "fake-cre-p5"},
+        }
+        hash_by_preset = {
+            "gc_full": "wb_fake_gc_full",
+            "gc_ca_overlay": "wb_fake_gc_ca",
+            "cre_p5": "wb_fake_cre_p5",
+        }
+        battery = battery_by_preset.get(self._preset_id or "", battery_by_preset["gc_full"])
+        config_hash = hash_by_preset.get(self._preset_id or "", "wb_fake_cafebabe")
         report = run_dir / "german_credit_validation_report.md"
         report.write_text(
             "# Fake OCC report\n\n## §I Scope\n\nDisclaimer.\n\n## §II Limitations\n\nLimits.\n",
@@ -272,10 +295,10 @@ class FakeRunner:
             json.dumps(
                 {
                     "status": verify,
-                    "protected_attribute": "sex",
-                    "reference_group": "male",
+                    "protected_attribute": battery["protected_attribute"],
+                    "reference_group": battery["reference_group"],
                     "jurisdiction_frame": "demo",
-                    "run_id": "fake-gc",
+                    "run_id": battery["run_id"],
                     "aequitas_pin": "fake",
                 },
                 indent=2,
@@ -320,8 +343,8 @@ class FakeRunner:
         return RunSnapshot(
             status=status,
             finding_title="AIR = 0.82 (sex)" if status != "failed" else "Validation exception",
-            finding_subtitle="German Credit demo · review-support only",
-            config_hash="wb_fake_cafebabe",
+            finding_subtitle=f"{self._preset_id} · review-support only",
+            config_hash=config_hash,
             primary_report=str(report),
             verify_status=verify,
             verify_breaks=[] if verify == "PASS" else [{"index": 0, "reason": "fake break"}],

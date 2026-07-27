@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
 import {
   cancelRun,
+  fetchCompare,
   fetchInspect,
   fetchPreflight,
   fetchPresets,
@@ -9,6 +10,7 @@ import {
   listRuns,
   reverify,
   startRun,
+  type ComparePayload,
   type Home,
   type InspectPayload,
   type PreflightCheck,
@@ -173,6 +175,8 @@ export default function App() {
   const [errorBanner, setErrorBanner] = useState<string | null>(null)
   const [timeline, setTimeline] = useState<TimelinePayload | null>(null)
   const [inspect, setInspect] = useState<InspectPayload | null>(null)
+  const [compareSelection, setCompareSelection] = useState<string[]>([])
+  const [compare, setCompare] = useState<ComparePayload | null>(null)
 
   const showToast = useCallback((m: string) => {
     setToast(m)
@@ -209,6 +213,8 @@ export default function App() {
     setActive(null)
     setTimeline(null)
     setInspect(null)
+    setCompareSelection([])
+    setCompare(null)
     setErrorBanner(null)
     void refreshMeta(home).catch((e) => setErrorBanner(String(e)))
   }, [home, refreshMeta])
@@ -238,6 +244,29 @@ export default function App() {
     }
     void loadPostRun(active.run_id)
   }, [active?.run_id, active?.status, loadPostRun])
+
+  const toggleCompareSelect = useCallback((runId: string) => {
+    setCompareSelection((prev) => {
+      if (prev.includes(runId)) {
+        return prev.filter((id) => id !== runId)
+      }
+      if (prev.length >= 2) {
+        return [prev[1], runId]
+      }
+      return [...prev, runId]
+    })
+  }, [])
+
+  useEffect(() => {
+    if (compareSelection.length !== 2) {
+      setCompare(null)
+      return
+    }
+    const [left, right] = compareSelection
+    void fetchCompare(home, left, right)
+      .then(setCompare)
+      .catch(() => setCompare(null))
+  }, [compareSelection, home])
 
   // Poll active run
   useEffect(() => {
@@ -583,6 +612,103 @@ export default function App() {
                 </div>
               )}
 
+              {compareSelection.length === 2 && compare && (
+                <section className="post-run compare-section" aria-label="Run compare" data-testid="compare-pane">
+                  <div className="post-run-block">
+                    <p className="stage-label">
+                      Compare · {compare.artifact_label}
+                      {compare.identical ? ' · identical' : ''}
+                    </p>
+                    <div className="compare-meta">
+                      <div className="inspect-well compare-side">
+                        <p className="integrity-label">Left · {compare.left.preset_id}</p>
+                        <div className="row">
+                          <span className="noun">run_id</span>
+                          <span className="val">{compare.left.run_id}</span>
+                        </div>
+                        <div className="row">
+                          <span className="noun">config_hash</span>
+                          <span className="val">{compare.left.config_hash || '—'}</span>
+                        </div>
+                        <div className="row">
+                          <span className="noun">status</span>
+                          <span className="val">
+                            <StatusDot state={compare.left.status || 'ok'} />
+                          </span>
+                        </div>
+                        {home === 'validation' && compare.left.verify_status && (
+                          <div className="row">
+                            <span className="noun">verify</span>
+                            <span className="val">
+                              <StatusDot
+                                state={
+                                  compare.left.verify_status === 'PASS'
+                                    ? 'pass'
+                                    : compare.left.verify_status === 'FAIL'
+                                      ? 'fail'
+                                      : 'qualified'
+                                }
+                              />
+                              {compare.left.verify_status}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="inspect-well compare-side">
+                        <p className="integrity-label">Right · {compare.right.preset_id}</p>
+                        <div className="row">
+                          <span className="noun">run_id</span>
+                          <span className="val">{compare.right.run_id}</span>
+                        </div>
+                        <div className="row">
+                          <span className="noun">config_hash</span>
+                          <span className="val">{compare.right.config_hash || '—'}</span>
+                        </div>
+                        <div className="row">
+                          <span className="noun">status</span>
+                          <span className="val">
+                            <StatusDot state={compare.right.status || 'ok'} />
+                          </span>
+                        </div>
+                        {home === 'validation' && compare.right.verify_status && (
+                          <div className="row">
+                            <span className="noun">verify</span>
+                            <span className="val">
+                              <StatusDot
+                                state={
+                                  compare.right.verify_status === 'PASS'
+                                    ? 'pass'
+                                    : compare.right.verify_status === 'FAIL'
+                                      ? 'fail'
+                                      : 'qualified'
+                                }
+                              />
+                              {compare.right.verify_status}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {compare.empty || !compare.diff_text ? (
+                      <div className="compact-blank">
+                        {compare.honesty || 'No diff — artifacts identical or unavailable.'}
+                      </div>
+                    ) : (
+                      <pre className="compare-diff">{compare.diff_text}</pre>
+                    )}
+                    <button
+                      className="btn"
+                      type="button"
+                      data-action="clear-compare"
+                      style={{ marginTop: 8 }}
+                      onClick={() => setCompareSelection([])}
+                    >
+                      Clear compare
+                    </button>
+                  </div>
+                </section>
+              )}
+
               {active && !['running', 'queued', 'accepted'].includes(active.status) && (
                 <section className="post-run" aria-label="Post-run evidence">
                   <div className="post-run-block" data-testid="timeline-pane">
@@ -725,6 +851,11 @@ export default function App() {
               <PanelToggle expanded={libOpen} onToggle={() => setLibOpen((v) => !v)} label="Run library" />
             </div>
             <div className="panel-body panel-body--full">
+              {compareSelection.length > 0 && (
+                <p className="compare-hint" data-testid="compare-hint">
+                  Compare {compareSelection.length}/2 — shift+click runs to select
+                </p>
+              )}
               {library.length === 0 ? (
                 <div className="compact-blank">No runs yet — first-run empty state</div>
               ) : (
@@ -732,11 +863,22 @@ export default function App() {
                   <button
                     key={row.run_id}
                     type="button"
-                    className={`run${active?.run_id === row.run_id ? ' active' : ''}`}
+                    className={[
+                      'run',
+                      active?.run_id === row.run_id ? 'active' : '',
+                      compareSelection.includes(row.run_id) ? 'compare-selected' : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
                     data-testid="library-run"
                     data-run-id={row.run_id}
+                    data-compare-selected={compareSelection.includes(row.run_id) ? 'true' : 'false'}
                     style={{ display: 'block', width: '100%', textAlign: 'left' }}
-                    onClick={() => {
+                    onClick={(ev) => {
+                      if (ev.shiftKey) {
+                        toggleCompareSelect(row.run_id)
+                        return
+                      }
                       void getRun(row.run_id).then(setActive)
                       if (row.artifacts_missing) showToast('Artifacts missing')
                     }}

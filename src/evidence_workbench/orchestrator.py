@@ -298,6 +298,50 @@ class Orchestrator:
         self._assert_under_run(run_dir, run_dir.resolve())
         return build_inspect(run_id=rid, home=home, status=status, run_dir=run_dir)
 
+    def compare(self, home: str, left_id: str, right_id: str) -> dict[str, Any]:
+        from evidence_workbench.artifacts import build_compare
+
+        if left_id == right_id:
+            raise ValueError("same_run")
+        left_home, left_status, _, left_dir = self._run_context(left_id)
+        right_home, right_status, _, right_dir = self._run_context(right_id)
+        if left_home != home or right_home != home:
+            raise ValueError("cross_home")
+        self._assert_under_run(left_dir, left_dir.resolve())
+        self._assert_under_run(right_dir, right_dir.resolve())
+        left_meta = self._compare_meta(left_id, left_home, left_status)
+        right_meta = self._compare_meta(right_id, right_home, right_status)
+        return build_compare(
+            home=home,
+            left_meta=left_meta,
+            right_meta=right_meta,
+            left_dir=left_dir,
+            right_dir=right_dir,
+        )
+
+    def _compare_meta(self, run_id: str, home: str, status: str) -> dict[str, Any]:
+        with self._lock:
+            active = self._active.get(run_id)
+        if active is not None:
+            snap = active.snapshot
+            return {
+                "run_id": run_id,
+                "preset_id": active.preset_id,
+                "config_hash": snap.config_hash,
+                "status": status,
+                "verify_status": snap.verify_status,
+            }
+        entry = self.index.get(run_id)
+        if entry is None:
+            raise KeyError(run_id)
+        return {
+            "run_id": run_id,
+            "preset_id": entry.preset_id,
+            "config_hash": entry.config_hash,
+            "status": status,
+            "verify_status": entry.verify_status,
+        }
+
     def _assert_under_run(self, run_dir: Path, path: Path) -> None:
         run_dir = run_dir.resolve()
         try:

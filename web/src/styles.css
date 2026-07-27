@@ -311,6 +311,47 @@ button.field {
   box-shadow: inset 2px 0 0 var(--selection);
   color: var(--text);
 }
+.run.compare-selected {
+  border-color: var(--accent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.run.compare-selected.active {
+  border-color: var(--accent);
+  box-shadow: inset 2px 0 0 var(--accent), inset 4px 0 0 var(--selection);
+}
+.compare-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin: 0 0 8px;
+  padding: 4px 6px;
+  border-left: 2px solid var(--accent);
+}
+.compare-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.compare-side { margin: 0; }
+.compare-diff {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  margin: 0;
+  max-height: 240px;
+  overflow: auto;
+  color: var(--text);
+}
+@media (max-width: 720px) {
+  .compare-meta { grid-template-columns: 1fr; }
+}
 .run .id { color: var(--text-muted); font-size: 10px; margin-top: 2px; }
 .chain { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .seg {

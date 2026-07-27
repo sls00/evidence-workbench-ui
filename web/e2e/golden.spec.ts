@@ -115,4 +115,35 @@ test.describe('Slice B golden paths (fake runners)', () => {
     await expect(page.getByTestId('finding-title')).toHaveText(title)
     await expect(page.locator('iframe[title="Report"]')).toBeVisible()
   })
+
+  test('Compare two generator runs (shift+select)', async ({ page }) => {
+    await page.goto('/?home=generator')
+    await page.locator('[data-action="run"]').click()
+    await expect(page.getByTestId('finding-card')).toHaveAttribute('data-status', 'running')
+    await waitTerminal(page)
+    const firstRunId = await page.locator('.proof-deck .row:has(.noun:text("run_id")) .val').innerText()
+
+    // Second run with different preset (scope to Controls rail — library also has preset labels)
+    await page.locator('.rail button.field', { hasText: 'rate_shock_1k' }).click()
+    await page.locator('[data-action="run"]').click()
+    await expect(page.getByTestId('finding-card')).toHaveAttribute('data-status', 'running')
+    await waitTerminal(page)
+    await expect
+      .poll(async () => page.locator('.proof-deck .row:has(.noun:text("run_id")) .val').innerText())
+      .not.toBe(firstRunId)
+    const secondRunId = await page.locator('.proof-deck .row:has(.noun:text("run_id")) .val').innerText()
+
+    const firstRow = page.locator(`[data-testid="library-run"][data-run-id="${firstRunId}"]`)
+    await expect(firstRow).toBeVisible()
+    await firstRow.click({ modifiers: ['Shift'] })
+    await expect(firstRow).toHaveAttribute('data-compare-selected', 'true')
+
+    const secondRow = page.locator(`[data-testid="library-run"][data-run-id="${secondRunId}"]`)
+    await expect(secondRow).toBeVisible()
+    await secondRow.click({ modifiers: ['Shift'] })
+
+    await expect(page.getByTestId('compare-pane')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('compare-pane')).toContainText(/validation\.json/i)
+    await expect(page.locator('.compare-diff')).toContainText(/subgroup_gap_pp/)
+  })
 })

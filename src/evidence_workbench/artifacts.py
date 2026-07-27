@@ -1,7 +1,8 @@
-"""Read-only post-run artifact views (timeline + inspect). No shadow metrics."""
+"""Read-only post-run artifact views (timeline + inspect + compare). No shadow metrics."""
 
 from __future__ import annotations
 
+import difflib
 import json
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,12 @@ VALIDATION_INSPECT_FILES = (
     "translation_methodology_v1.json",
     "fidelity_validation_report.json",
 )
+
+GENERATOR_COMPARE_CANDIDATES = (
+    "validation.json",
+    "panel/validation.json",
+)
+VALIDATION_COMPARE_CANDIDATES = ("bias_battery_summary.json",)
 
 
 def _safe_rel(run_dir: Path, rel: str) -> Path | None:
@@ -389,6 +396,112 @@ def _validation_inspect(run_dir: Path) -> list[dict[str, Any]]:
                 )
 
     return panes
+
+
+def _resolve_compare_artifact(home: str, run_dir: Path) -> tuple[str | None, Path | None]:
+    candidates = GENERATOR_COMPARE_CANDIDATES if home == "generator" else VALIDATION_COMPARE_CANDIDATES
+    for rel in candidates:
+        path = _safe_rel(run_dir, rel)
+        if path is not None:
+            return rel, path
+    return None, None
+
+
+def _pretty_json(data: Any) -> list[str]:
+    text = json.dumps(data, indent=2, sort_keys=True, ensure_ascii=False)
+    return text.splitlines(keepends=True)
+
+
+def build_compare(
+    *,
+    home: str,
+    left_meta: dict[str, Any],
+    right_meta: dict[str, Any],
+    left_dir: Path,
+    right_dir: Path,
+) -> dict[str, Any]:
+    """Same-home textual JSON diff of allowlisted compare artifacts."""
+    left_status = str(left_meta.get("status") or "")
+    right_status = str(right_meta.get("status") or "")
+    non_terminal = {"running", "queued", "accepted", "incomplete"}
+
+    if left_status in non_terminal or right_status in non_terminal:
+        return {
+            "home": home,
+            "left": left_meta,
+            "right": right_meta,
+            "artifact_label": _compare_label(home),
+            "empty": True,
+            "identical": False,
+            "diff_text": "",
+            "honesty": "Compare available only for terminal runs with artifacts on disk.",
+        }
+
+    left_rel, left_path = _resolve_compare_artifact(home, left_dir)
+    right_rel, right_path = _resolve_compare_artifact(home, right_dir)
+
+    left_meta = {**left_meta, "artifact_source": left_rel, "artifact_missing": left_path is None}
+    right_meta = {**right_meta, "artifact_source": right_rel, "artifact_missing": right_path is None}
+
+    if left_path is None or right_path is None:
+        missing = []
+        if left_path is None:
+            missing.append("left")
+        if right_path is None:
+            missing.append("right")
+        return {
+            "home": home,
+            "left": left_meta,
+            "right": right_meta,
+            "artifact_label": _compare_label(home),
+            "empty": True,
+            "identical": False,
+            "diff_text": "",
+            "honesty": f"Compare artifact missing on disk ({', '.join(missing)}).",
+        }
+
+    left_data = _read_json(left_path)
+    right_data = _read_json(right_path)
+    if left_data is None or right_data is None:
+        return {
+            "home": home,
+            "left": left_meta,
+            "right": right_meta,
+            "artifact_label": _compare_label(home),
+            "empty": True,
+            "identical": False,
+            "diff_text": "",
+            "honesty": "Compare artifact unreadable or corrupt JSON.",
+        }
+
+    left_lines = _pretty_json(left_data)
+    right_lines = _pretty_json(right_data)
+    diff_lines = list(
+        difflib.unified_diff(
+            left_lines,
+            right_lines,
+            fromfile=f"{left_meta.get('run_id')}/{left_rel}",
+            tofile=f"{right_meta.get('run_id')}/{right_rel}",
+            lineterm="",
+        )
+    )
+    diff_text = "".join(diff_lines)
+    identical = left_data == right_data
+
+    return {
+        "home": home,
+        "left": left_meta,
+        "right": right_meta,
+        "artifact_label": _compare_label(home),
+        "empty": identical and not diff_text,
+        "identical": identical,
+        "diff_text": diff_text,
+        "honesty": "Artifacts identical — no diff lines." if identical else None,
+    }
+
+
+def _compare_label(home: str) -> str:
+    return "validation.json" if home == "generator" else "bias_battery_summary.json"
 
 
 def wrap_markdown_report(markdown_text: str, *, title: str = "Report") -> str:
