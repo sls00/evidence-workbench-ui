@@ -301,3 +301,12 @@ def test_report_served(client: TestClient):
     rep = client.get(f"/api/runs/{run_id}/report")
     assert rep.status_code == 200
     assert b"Fake synth-fin report" in rep.content
+
+
+def test_default_bind_host_respects_explicit():
+    from evidence_workbench.netutil import default_bind_host, public_urls
+
+    assert default_bind_host(explicit="127.0.0.1") == "127.0.0.1"
+    assert default_bind_host(explicit="0.0.0.0") == "0.0.0.0"
+    urls = public_urls(host="0.0.0.0", port=8765, home="generator")
+    assert urls[0] == "http://127.0.0.1:8765/?home=generator"

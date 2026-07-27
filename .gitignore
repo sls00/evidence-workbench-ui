@@ -21,3 +21,6 @@ htmlcov/
 # Nested worktrees (keep parallel checkouts inside the repo)
 .worktrees/*
 !.worktrees/README.md
+
+# Local QA run trees (do not commit)
+.evidence-runs-qa/

@@ -24,6 +24,7 @@ Local **Evidence Workbench** — a dual-home review instrument that orchestrates
 uv sync --group dev
 uv run evidence-workbench --home generator --fake-runners
 # → http://127.0.0.1:8765/?home=generator
+# On WSL, binds 0.0.0.0 by default so Windows/Cursor can reach it (see below).
 ```
 
 Hot-reload UI (API already running on `:8765`):
@@ -38,6 +39,10 @@ Real engines (siblings keep their own uv envs):
 export SYNTH_FIN_ROOT=../synth-fin AI_MRG_BENCH_ROOT=../ai-mrg-bench
 uv run evidence-workbench --home generator
 ```
+
+### WSL + Cursor IDE browser
+
+Cursor’s browser runs on **Windows**; this server runs in **WSL**. Durable fix: `networkingMode=mirrored` in `%UserProfile%\.wslconfig`, then `wsl --shutdown` (see [docs/wsl-cursor-browser.md](docs/wsl-cursor-browser.md)). Fallback: `scripts/wsl-windows-portbridge.ps1` (Admin).
 
 ## Deep-links
 
@@ -85,6 +90,7 @@ GitHub Actions: Python smoke, web build, design-lock sha256 check.
 ## Docs
 
 - [Architecture overview](docs/architecture/overview.md)
+- [WSL + Cursor IDE browser](docs/wsl-cursor-browser.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security](SECURITY.md)
 - Deferred post–Slice A work: [TODOS.md](TODOS.md)
