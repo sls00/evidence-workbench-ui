@@ -20,7 +20,7 @@ jobs:
       has_web: ${{ steps.files.outputs.has_web }}
       has_design: ${{ steps.files.outputs.has_design }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: files
         run: |
           echo "has_python=$([ -f pyproject.toml ] && [ -d src/evidence_workbench ] && [ -d tests ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
@@ -33,11 +33,11 @@ jobs:
     if: needs.detect.outputs.has_python == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.11'
       - name: Sync + test
@@ -57,7 +57,7 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
@@ -72,7 +72,7 @@ jobs:
     if: needs.detect.outputs.has_design == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Verify vendored finalized chrome
         run: |
           test -f vendor/design/finalized.html
@@ -87,7 +87,7 @@ jobs:
     if: needs.detect.outputs.has_python != 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Require license + workflow
         run: |
           test -f LICENSE
