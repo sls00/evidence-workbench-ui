@@ -17,3 +17,7 @@ htmlcov/
 .idea/
 .vscode/
 *.swp
+
+# Nested worktrees (keep parallel checkouts inside the repo)
+.worktrees/*
+!.worktrees/README.md
