@@ -504,6 +504,95 @@ def _compare_label(home: str) -> str:
     return "validation.json" if home == "generator" else "bias_battery_summary.json"
 
 
+def _extract_body_html(html: str) -> str:
+    lower = html.lower()
+    body_start = lower.find("<body")
+    if body_start == -1:
+        return html.strip()
+    open_end = html.find(">", body_start)
+    if open_end == -1:
+        return html.strip()
+    body_end = lower.rfind("</body>")
+    if body_end == -1:
+        return html[open_end + 1 :].strip()
+    return html[open_end + 1 : body_end].strip()
+
+
+def _report_theme_tokens(theme: str) -> dict[str, str]:
+    if theme == "light":
+        return {
+            "bg": "#F4F5F6",
+            "panel": "#FFFFFF",
+            "elevated": "#EEF0F2",
+            "border": "#D5DAE0",
+            "text": "#161B20",
+            "muted": "#5C6670",
+            "accent": "#9A6B3C",
+            "selection": "#4D6578",
+        }
+    return {
+        "bg": "#0E1114",
+        "panel": "#161B20",
+        "elevated": "#1E252C",
+        "border": "#2A333C",
+        "text": "#E8EAED",
+        "muted": "#9AA3AD",
+        "accent": "#D4A574",
+        "selection": "#7A93A8",
+    }
+
+
+def wrap_html_report_embed(html_text: str, *, title: str = "Report", theme: str = "dark") -> str:
+    """Readable embed shell for engine HTML — DESIGN.md tokens; does not rewrite metrics."""
+    tokens = _report_theme_tokens(theme if theme == "light" else "dark")
+    fragment = _extract_body_html(html_text)
+    safe_title = (
+        title.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="color-scheme" content="{theme}"/>
+<title>{safe_title}</title>
+<style>
+  :root {{
+    --bg: {tokens["bg"]}; --panel: {tokens["panel"]}; --elevated: {tokens["elevated"]};
+    --border: {tokens["border"]}; --text: {tokens["text"]}; --muted: {tokens["muted"]};
+    --accent: {tokens["accent"]}; --selection: {tokens["selection"]};
+    --font: "Commit Mono", "CommitMono", ui-monospace, monospace;
+    --display: "Cabinet Grotesk", "CabinetGrotesk", system-ui, sans-serif;
+  }}
+  html, body {{ margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: var(--font); font-size: 14px; line-height: 1.55; color-scheme: {theme}; }}
+  .wrap {{ max-width: 52rem; margin: 0 auto; padding: 16px 18px 32px; }}
+  .eyebrow {{ font-size: 11px; color: var(--muted); letter-spacing: 0.04em;
+    border-left: 2px solid var(--selection); padding-left: 8px; margin-bottom: 12px; }}
+  .embed-body {{
+    background: var(--elevated); border: 1px solid var(--border);
+    border-left: 2px solid var(--accent); border-radius: 4px;
+    padding: 14px 16px; color: var(--text);
+  }}
+  .embed-body :where(h1,h2,h3,h4,h5,h6,p,li,td,th,span,div,pre,code) {{
+    color: var(--text);
+  }}
+  .embed-body a {{ color: var(--accent); }}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <p class="eyebrow">Review-support report · HTML (engine artifact)</p>
+    <div class="embed-body">{fragment}</div>
+  </div>
+</body>
+</html>
+"""
+
+
 def wrap_markdown_report(markdown_text: str, *, title: str = "Report") -> str:
     """Minimal HTML shell using DESIGN.md tokens — no metric invention."""
     # Escape is intentional-light: reports are local trusted engine output.

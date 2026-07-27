@@ -396,7 +396,9 @@ export default function App() {
   }, [railOpen, railW])
 
   const reportSrc =
-    active?.run_id && active.report_url && !active.artifacts_missing ? active.report_url : null
+    active?.run_id && active.report_url && !active.artifacts_missing
+      ? `${active.report_url}?theme=${theme}`
+      : null
 
   return (
     <div className="app">

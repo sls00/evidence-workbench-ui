@@ -22,7 +22,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from evidence_workbench.artifacts import wrap_markdown_report
+from evidence_workbench.artifacts import wrap_html_report_embed, wrap_markdown_report
 from evidence_workbench.orchestrator import BusyError, Orchestrator
 from evidence_workbench.preflight import run_preflight
 from evidence_workbench.presets import presets_for
@@ -170,7 +170,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail={"error": {"code": "not_found", "message": str(run_id), "hint": ""}}) from exc
 
     @app.get("/api/runs/{run_id}/report", response_model=None)
-    def get_report(run_id: str, download: bool = Query(False)):
+    def get_report(
+        run_id: str,
+        download: bool = Query(False),
+        theme: Literal["dark", "light"] = Query("dark"),
+    ):
         orch: Orchestrator = app.state.orch
         try:
             path = orch.report_path(run_id)
@@ -181,8 +185,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         suffix = path.suffix.lower()
         disposition = "attachment" if download else "inline"
         if suffix in {".html", ".htm"}:
-            return FileResponse(
-                path,
+            if download:
+                return FileResponse(
+                    path,
+                    media_type="text/html",
+                    headers={"Content-Disposition": f'{disposition}; filename="{path.name}"'},
+                )
+            text = path.read_text(encoding="utf-8")
+            html = wrap_html_report_embed(text, title=path.name, theme=theme)
+            return HTMLResponse(
+                html,
                 media_type="text/html",
                 headers={"Content-Disposition": f'{disposition}; filename="{path.name}"'},
             )
