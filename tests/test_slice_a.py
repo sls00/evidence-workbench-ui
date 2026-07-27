@@ -288,6 +288,19 @@ def test_report_served(client: TestClient):
     assert "attachment" in dl.headers.get("content-disposition", "").lower()
 
 
+def test_html_report_embed_strips_engine_styles():
+    from evidence_workbench.artifacts import wrap_html_report_embed
+
+    raw = """<!doctype html><html><head><style>h1{color:#000}</style></head>
+    <body><h1 style="color:#000">Title</h1><p>body</p></body></html>"""
+    wrapped = wrap_html_report_embed(raw, title="t.html", theme="dark")
+    assert "embed-body" in wrapped
+    assert "<style>" not in wrapped.split("embed-body")[1]
+    assert 'style="color:#000"' not in wrapped
+    assert "!important" in wrapped
+    assert "#E8EAED" in wrapped
+
+
 def test_default_bind_host_respects_explicit():
     from evidence_workbench.netutil import default_bind_host, public_urls
 

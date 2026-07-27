@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import difflib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -542,10 +543,18 @@ def _report_theme_tokens(theme: str) -> dict[str, str]:
     }
 
 
+def _sanitize_embed_fragment(html: str) -> str:
+    """Drop engine style hooks that fight the embed shell (download still serves raw file)."""
+    html = re.sub(r"<style\b[^>]*>.*?</style>", "", html, flags=re.I | re.S)
+    html = re.sub(r'\sstyle="[^"]*"', "", html, flags=re.I)
+    html = re.sub(r"\sstyle='[^']*'", "", html, flags=re.I)
+    return html.strip()
+
+
 def wrap_html_report_embed(html_text: str, *, title: str = "Report", theme: str = "dark") -> str:
     """Readable embed shell for engine HTML — DESIGN.md tokens; does not rewrite metrics."""
     tokens = _report_theme_tokens(theme if theme == "light" else "dark")
-    fragment = _extract_body_html(html_text)
+    fragment = _sanitize_embed_fragment(_extract_body_html(html_text))
     safe_title = (
         title.replace("&", "&amp;")
         .replace("<", "&lt;")
@@ -577,10 +586,16 @@ def wrap_html_report_embed(html_text: str, *, title: str = "Report", theme: str 
     border-left: 2px solid var(--accent); border-radius: 4px;
     padding: 14px 16px; color: var(--text);
   }}
-  .embed-body :where(h1,h2,h3,h4,h5,h6,p,li,td,th,span,div,pre,code) {{
-    color: var(--text);
+  /* UA + engine styles often beat :where(); embed shell must win for readability. */
+  .embed-body,
+  .embed-body h1, .embed-body h2, .embed-body h3, .embed-body h4,
+  .embed-body h5, .embed-body h6, .embed-body p, .embed-body li,
+  .embed-body td, .embed-body th, .embed-body span, .embed-body div,
+  .embed-body pre, .embed-body code, .embed-body label, .embed-body strong {{
+    color: var(--text) !important;
+    background-color: transparent !important;
   }}
-  .embed-body a {{ color: var(--accent); }}
+  .embed-body a {{ color: var(--accent) !important; }}
 </style>
 </head>
 <body>
