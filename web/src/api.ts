@@ -137,3 +137,29 @@ export function fetchTimeline(runId: string) {
 export function fetchInspect(runId: string) {
   return api<InspectPayload>(`/api/runs/${runId}/inspect`)
 }
+
+export type CompareRunMeta = {
+  run_id: string
+  preset_id?: string
+  config_hash?: string | null
+  status?: string
+  verify_status?: string | null
+  artifact_source?: string | null
+  artifact_missing?: boolean
+}
+
+export type ComparePayload = {
+  home: string
+  left: CompareRunMeta
+  right: CompareRunMeta
+  artifact_label: string
+  empty: boolean
+  identical: boolean
+  diff_text: string
+  honesty?: string | null
+}
+
+export function fetchCompare(home: Home, leftId: string, rightId: string) {
+  const q = new URLSearchParams({ home, left: leftId, right: rightId })
+  return api<ComparePayload>(`/api/runs/compare?${q}`)
+}

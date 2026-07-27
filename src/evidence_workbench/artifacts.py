@@ -1,7 +1,8 @@
-"""Read-only post-run artifact views (timeline + inspect). No shadow metrics."""
+"""Read-only post-run artifact views (timeline + inspect + compare). No shadow metrics."""
 
 from __future__ import annotations
 
+import difflib
 import json
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,12 @@ VALIDATION_INSPECT_FILES = (
     "translation_methodology_v1.json",
     "fidelity_validation_report.json",
 )
+
+GENERATOR_COMPARE_CANDIDATES = (
+    "validation.json",
+    "panel/validation.json",
+)
+VALIDATION_COMPARE_CANDIDATES = ("bias_battery_summary.json",)
 
 
 def _safe_rel(run_dir: Path, rel: str) -> Path | None:
@@ -389,6 +396,201 @@ def _validation_inspect(run_dir: Path) -> list[dict[str, Any]]:
                 )
 
     return panes
+
+
+def _resolve_compare_artifact(home: str, run_dir: Path) -> tuple[str | None, Path | None]:
+    candidates = GENERATOR_COMPARE_CANDIDATES if home == "generator" else VALIDATION_COMPARE_CANDIDATES
+    for rel in candidates:
+        path = _safe_rel(run_dir, rel)
+        if path is not None:
+            return rel, path
+    return None, None
+
+
+def _pretty_json(data: Any) -> list[str]:
+    text = json.dumps(data, indent=2, sort_keys=True, ensure_ascii=False)
+    return text.splitlines(keepends=True)
+
+
+def build_compare(
+    *,
+    home: str,
+    left_meta: dict[str, Any],
+    right_meta: dict[str, Any],
+    left_dir: Path,
+    right_dir: Path,
+) -> dict[str, Any]:
+    """Same-home textual JSON diff of allowlisted compare artifacts."""
+    left_status = str(left_meta.get("status") or "")
+    right_status = str(right_meta.get("status") or "")
+    non_terminal = {"running", "queued", "accepted", "incomplete"}
+
+    if left_status in non_terminal or right_status in non_terminal:
+        return {
+            "home": home,
+            "left": left_meta,
+            "right": right_meta,
+            "artifact_label": _compare_label(home),
+            "empty": True,
+            "identical": False,
+            "diff_text": "",
+            "honesty": "Compare available only for terminal runs with artifacts on disk.",
+        }
+
+    left_rel, left_path = _resolve_compare_artifact(home, left_dir)
+    right_rel, right_path = _resolve_compare_artifact(home, right_dir)
+
+    left_meta = {**left_meta, "artifact_source": left_rel, "artifact_missing": left_path is None}
+    right_meta = {**right_meta, "artifact_source": right_rel, "artifact_missing": right_path is None}
+
+    if left_path is None or right_path is None:
+        missing = []
+        if left_path is None:
+            missing.append("left")
+        if right_path is None:
+            missing.append("right")
+        return {
+            "home": home,
+            "left": left_meta,
+            "right": right_meta,
+            "artifact_label": _compare_label(home),
+            "empty": True,
+            "identical": False,
+            "diff_text": "",
+            "honesty": f"Compare artifact missing on disk ({', '.join(missing)}).",
+        }
+
+    left_data = _read_json(left_path)
+    right_data = _read_json(right_path)
+    if left_data is None or right_data is None:
+        return {
+            "home": home,
+            "left": left_meta,
+            "right": right_meta,
+            "artifact_label": _compare_label(home),
+            "empty": True,
+            "identical": False,
+            "diff_text": "",
+            "honesty": "Compare artifact unreadable or corrupt JSON.",
+        }
+
+    left_lines = _pretty_json(left_data)
+    right_lines = _pretty_json(right_data)
+    diff_lines = list(
+        difflib.unified_diff(
+            left_lines,
+            right_lines,
+            fromfile=f"{left_meta.get('run_id')}/{left_rel}",
+            tofile=f"{right_meta.get('run_id')}/{right_rel}",
+            lineterm="",
+        )
+    )
+    diff_text = "".join(diff_lines)
+    identical = left_data == right_data
+
+    return {
+        "home": home,
+        "left": left_meta,
+        "right": right_meta,
+        "artifact_label": _compare_label(home),
+        "empty": identical and not diff_text,
+        "identical": identical,
+        "diff_text": diff_text,
+        "honesty": "Artifacts identical — no diff lines." if identical else None,
+    }
+
+
+def _compare_label(home: str) -> str:
+    return "validation.json" if home == "generator" else "bias_battery_summary.json"
+
+
+def _extract_body_html(html: str) -> str:
+    lower = html.lower()
+    body_start = lower.find("<body")
+    if body_start == -1:
+        return html.strip()
+    open_end = html.find(">", body_start)
+    if open_end == -1:
+        return html.strip()
+    body_end = lower.rfind("</body>")
+    if body_end == -1:
+        return html[open_end + 1 :].strip()
+    return html[open_end + 1 : body_end].strip()
+
+
+def _report_theme_tokens(theme: str) -> dict[str, str]:
+    if theme == "light":
+        return {
+            "bg": "#F4F5F6",
+            "panel": "#FFFFFF",
+            "elevated": "#EEF0F2",
+            "border": "#D5DAE0",
+            "text": "#161B20",
+            "muted": "#5C6670",
+            "accent": "#9A6B3C",
+            "selection": "#4D6578",
+        }
+    return {
+        "bg": "#0E1114",
+        "panel": "#161B20",
+        "elevated": "#1E252C",
+        "border": "#2A333C",
+        "text": "#E8EAED",
+        "muted": "#9AA3AD",
+        "accent": "#D4A574",
+        "selection": "#7A93A8",
+    }
+
+
+def wrap_html_report_embed(html_text: str, *, title: str = "Report", theme: str = "dark") -> str:
+    """Readable embed shell for engine HTML — DESIGN.md tokens; does not rewrite metrics."""
+    tokens = _report_theme_tokens(theme if theme == "light" else "dark")
+    fragment = _extract_body_html(html_text)
+    safe_title = (
+        title.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="color-scheme" content="{theme}"/>
+<title>{safe_title}</title>
+<style>
+  :root {{
+    --bg: {tokens["bg"]}; --panel: {tokens["panel"]}; --elevated: {tokens["elevated"]};
+    --border: {tokens["border"]}; --text: {tokens["text"]}; --muted: {tokens["muted"]};
+    --accent: {tokens["accent"]}; --selection: {tokens["selection"]};
+    --font: "Commit Mono", "CommitMono", ui-monospace, monospace;
+    --display: "Cabinet Grotesk", "CabinetGrotesk", system-ui, sans-serif;
+  }}
+  html, body {{ margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: var(--font); font-size: 14px; line-height: 1.55; color-scheme: {theme}; }}
+  .wrap {{ max-width: 52rem; margin: 0 auto; padding: 16px 18px 32px; }}
+  .eyebrow {{ font-size: 11px; color: var(--muted); letter-spacing: 0.04em;
+    border-left: 2px solid var(--selection); padding-left: 8px; margin-bottom: 12px; }}
+  .embed-body {{
+    background: var(--elevated); border: 1px solid var(--border);
+    border-left: 2px solid var(--accent); border-radius: 4px;
+    padding: 14px 16px; color: var(--text);
+  }}
+  .embed-body :where(h1,h2,h3,h4,h5,h6,p,li,td,th,span,div,pre,code) {{
+    color: var(--text);
+  }}
+  .embed-body a {{ color: var(--accent); }}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <p class="eyebrow">Review-support report · HTML (engine artifact)</p>
+    <div class="embed-body">{fragment}</div>
+  </div>
+</body>
+</html>
+"""
 
 
 def wrap_markdown_report(markdown_text: str, *, title: str = "Report") -> str:
