@@ -103,6 +103,20 @@ def spawn_process_group(
     )
 
 
+def _env_fake_delay(default: float = 0.15) -> float:
+    raw = os.environ.get("EVIDENCE_FAKE_RUNNER_DELAY", "").strip()
+    if not raw:
+        return default
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return default
+
+
+def _env_fake_hang() -> bool:
+    return os.environ.get("EVIDENCE_FAKE_RUNNER_HANG", "").lower() in {"1", "true", "yes"}
+
+
 class FakeRunner:
     """Deterministic in-process runner for default CI (no LFS / engines)."""
 
@@ -110,14 +124,14 @@ class FakeRunner:
         self,
         *,
         home: str,
-        delay_seconds: float = 0.15,
+        delay_seconds: float | None = None,
         outcome: str = "ok",
-        hang: bool = False,
+        hang: bool | None = None,
     ) -> None:
         self.home = home
-        self.delay_seconds = delay_seconds
+        self.delay_seconds = _env_fake_delay() if delay_seconds is None else delay_seconds
         self.outcome = outcome
-        self.hang = hang
+        self.hang = _env_fake_hang() if hang is None else hang
         self._started_at: float | None = None
         self._run_dir: Path | None = None
         self._preset_id: str | None = None
@@ -198,10 +212,22 @@ class FakeRunner:
             },
         }
         (run_dir / "validation.json").write_text(json.dumps(validation, indent=2), encoding="utf-8")
-        (run_dir / "manifest.json").write_text(
-            json.dumps({"config_hash": "sf_fake_deadbeef", "bias_profile": self._preset_id}, indent=2),
-            encoding="utf-8",
-        )
+        panel = run_dir / "panel"
+        panel.mkdir(parents=True, exist_ok=True)
+        (panel / "validation.json").write_text(json.dumps(validation, indent=2), encoding="utf-8")
+        manifest = {
+            "config_hash": "sf_fake_deadbeef",
+            "bias_profile": self._preset_id,
+            "stages": [
+                {"stage": "cli.parse", "preset": self._preset_id},
+                {"stage": "seed.load", "n_seed": 1000},
+                {"stage": "copula.sample", "n": 1000},
+                {"stage": "bias.apply", "profile": self._preset_id},
+                {"stage": "io.write"},
+            ],
+        }
+        (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        (panel / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
         report = run_dir / "report.html"
         report.write_text(
             "<!doctype html><html><body><h1>Fake synth-fin report</h1>"
@@ -241,13 +267,56 @@ class FakeRunner:
             "# Fake OCC report\n\n## §I Scope\n\nDisclaimer.\n\n## §II Limitations\n\nLimits.\n",
             encoding="utf-8",
         )
+        verify = "PASS" if status == "ok" else ("FAIL" if status == "failed" else "PASS")
         (run_dir / "bias_battery_summary.json").write_text(
-            json.dumps({"status": "PASS" if status == "ok" else "FAIL"}, indent=2),
+            json.dumps(
+                {
+                    "status": verify,
+                    "protected_attribute": "sex",
+                    "reference_group": "male",
+                    "jurisdiction_frame": "demo",
+                    "run_id": "fake-gc",
+                    "aequitas_pin": "fake",
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        (run_dir / "drift_report.json").write_text(
+            json.dumps(
+                {
+                    "overall_alert_level": "none",
+                    "materiality_tier": "low",
+                    "recommended_action": "monitor",
+                    "run_id": "fake-gc",
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        (run_dir / "translation_methodology_v1.json").write_text(
+            json.dumps({"version": "v1", "methodology_hash": "wb_fake_method_hash"}, indent=2),
+            encoding="utf-8",
+        )
+        (run_dir / "audit_chain_verification.json").write_text(
+            json.dumps(
+                {
+                    "status": verify,
+                    "events": 4,
+                    "breaks": [],
+                    "event_type_counts": {
+                        "validation_run.start": 1,
+                        "bias_battery.result": 1,
+                        "drift.event": 1,
+                        "validation_run.complete": 1,
+                    },
+                },
+                indent=2,
+            ),
             encoding="utf-8",
         )
         db = run_dir / "workbench.db"
         db.write_bytes(b"")  # placeholder; verify unknown unless real chain
-        verify = "PASS" if status == "ok" else ("FAIL" if status == "failed" else "PASS")
         return RunSnapshot(
             status=status,
             finding_title="AIR = 0.82 (sex)" if status != "failed" else "Validation exception",

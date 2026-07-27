@@ -21,3 +21,11 @@ htmlcov/
 # Nested worktrees (keep parallel checkouts inside the repo)
 .worktrees/*
 !.worktrees/README.md
+
+# Local QA / Playwright run trees (do not commit)
+.evidence-runs-qa/
+.evidence-runs-e2e/
+web/test-results/
+web/playwright-report/
+web/blob-report/
+web/playwright/.cache/
