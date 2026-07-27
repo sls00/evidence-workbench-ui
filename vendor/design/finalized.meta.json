@@ -1,0 +1,13 @@
+{
+  "skill": "design-html",
+  "source": "approved C-prime (html-composition)",
+  "tier": "CSS flow for chrome; Pretext deferred for short findings/disclaimers (vendored for report body later)",
+  "format": "vanilla HTML",
+  "spacing": "locked to design-shotgun variant-C.html",
+  "files": [
+    "finalized.html",
+    "pretext.js"
+  ],
+  "updated": "2026-07-26T04:18:19.527961+00:00",
+  "note": "User preferred shotgun C spacing over Pretext-inflated finding header; finalized rebuilt from variant-C."
+}
