@@ -278,6 +278,11 @@ def test_report_served(client: TestClient):
     rep = client.get(f"/api/runs/{run_id}/report")
     assert rep.status_code == 200
     assert b"Fake synth-fin report" in rep.content
+    assert "inline" in rep.headers.get("content-disposition", "").lower()
+
+    dl = client.get(f"/api/runs/{run_id}/report", params={"download": True})
+    assert dl.status_code == 200
+    assert "attachment" in dl.headers.get("content-disposition", "").lower()
 
 
 def test_default_bind_host_respects_explicit():

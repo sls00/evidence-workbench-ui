@@ -170,7 +170,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail={"error": {"code": "not_found", "message": str(run_id), "hint": ""}}) from exc
 
     @app.get("/api/runs/{run_id}/report", response_model=None)
-    def get_report(run_id: str):
+    def get_report(run_id: str, download: bool = Query(False)):
         orch: Orchestrator = app.state.orch
         try:
             path = orch.report_path(run_id)
@@ -179,13 +179,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except PermissionError as exc:
             raise HTTPException(status_code=400, detail={"error": {"code": "path_traversal", "message": str(exc), "hint": ""}}) from exc
         suffix = path.suffix.lower()
+        disposition = "attachment" if download else "inline"
         if suffix in {".html", ".htm"}:
-            return FileResponse(path, media_type="text/html", filename=path.name)
+            return FileResponse(
+                path,
+                media_type="text/html",
+                headers={"Content-Disposition": f'{disposition}; filename="{path.name}"'},
+            )
         if suffix in {".md", ".markdown"}:
             text = path.read_text(encoding="utf-8")
             html = wrap_markdown_report(text, title=path.name)
-            return HTMLResponse(html, media_type="text/html")
-        return FileResponse(path, media_type="application/octet-stream", filename=path.name)
+            out_name = f"{path.stem}.html"
+            return HTMLResponse(
+                html,
+                media_type="text/html",
+                headers={"Content-Disposition": f'{disposition}; filename="{out_name}"'},
+            )
+        return FileResponse(
+            path,
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": f'{disposition}; filename="{path.name}"'},
+        )
 
     @app.get("/api/runs/{run_id}/timeline")
     def get_timeline(run_id: str) -> dict[str, Any]:

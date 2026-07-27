@@ -89,6 +89,15 @@ function copyText(text: string, toast: (m: string) => void) {
   )
 }
 
+function downloadReport(runId: string) {
+  const a = document.createElement('a')
+  a.href = `/api/runs/${runId}/report?download=1`
+  a.rel = 'noopener'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
+
 function formatInspectValue(value: unknown): string {
   if (value === null || value === undefined) return '—'
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
@@ -177,6 +186,7 @@ export default function App() {
   const [inspect, setInspect] = useState<InspectPayload | null>(null)
   const [compareSelection, setCompareSelection] = useState<string[]>([])
   const [compare, setCompare] = useState<ComparePayload | null>(null)
+  const [libGuideOpen, setLibGuideOpen] = useState(false)
 
   const showToast = useCallback((m: string) => {
     setToast(m)
@@ -385,9 +395,8 @@ export default function App() {
     }
   }, [railOpen, railW])
 
-  const reportSrc = active?.run_id && active.primary_report && !active.artifacts_missing
-    ? `/api/runs/${active.run_id}/report`
-    : null
+  const reportSrc =
+    active?.run_id && active.report_url && !active.artifacts_missing ? active.report_url : null
 
   return (
     <div className="app">
@@ -851,6 +860,30 @@ export default function App() {
               <PanelToggle expanded={libOpen} onToggle={() => setLibOpen((v) => !v)} label="Run library" />
             </div>
             <div className="panel-body panel-body--full">
+              <div className="library-instructions">
+                <button
+                  type="button"
+                  className="library-instructions-toggle"
+                  aria-expanded={libGuideOpen}
+                  data-testid="library-instructions-toggle"
+                  onClick={() => setLibGuideOpen((v) => !v)}
+                >
+                  Instructions
+                </button>
+                {libGuideOpen && (
+                  <div className="library-instructions-body" data-testid="library-instructions-body">
+                    <p>
+                      <strong>Click</strong> — reopen run (finding, timeline, inspect, report embed)
+                    </p>
+                    <p>
+                      <strong>Shift+click</strong> — select up to 2 runs to compare
+                    </p>
+                    <p>
+                      <strong>Double-click</strong> — download report file
+                    </p>
+                  </div>
+                )}
+              </div>
               {compareSelection.length > 0 && (
                 <p className="compare-hint" data-testid="compare-hint">
                   Compare {compareSelection.length}/2 — shift+click runs to select
@@ -881,6 +914,15 @@ export default function App() {
                       }
                       void getRun(row.run_id).then(setActive)
                       if (row.artifacts_missing) showToast('Artifacts missing')
+                    }}
+                    onDoubleClick={(ev) => {
+                      ev.preventDefault()
+                      if (row.artifacts_missing) {
+                        showToast('Artifacts missing')
+                        return
+                      }
+                      downloadReport(row.run_id)
+                      showToast('Downloading report')
                     }}
                   >
                     <div>
