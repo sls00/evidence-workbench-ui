@@ -974,27 +974,27 @@ export default function App() {
             {libOpen && <PanelResizer side="library" onDrag={onResizeLib} />}
           </aside>
         </div>
+      </div>
 
-        <div className="keymap" aria-label="Keyboard shortcuts">
-          <span>
-            <kbd>1</kbd>/<kbd>2</kbd> homes
-          </span>
-          <span>
-            <kbd>[</kbd>/<kbd>]</kbd> panels
-          </span>
-          <span>
-            <kbd>r</kbd> Run
-          </span>
-          <span>
-            <kbd>v</kbd> Re-verify
-          </span>
-          <span>
-            <kbd>c</kbd> copy token
-          </span>
-          <span>
-            <kbd>t</kbd> theme
-          </span>
-        </div>
+      <div className="keymap" aria-label="Keyboard shortcuts">
+        <span>
+          <kbd>1</kbd>/<kbd>2</kbd> homes
+        </span>
+        <span>
+          <kbd>[</kbd>/<kbd>]</kbd> panels
+        </span>
+        <span>
+          <kbd>r</kbd> Run
+        </span>
+        <span>
+          <kbd>v</kbd> Re-verify
+        </span>
+        <span>
+          <kbd>c</kbd> copy token
+        </span>
+        <span>
+          <kbd>t</kbd> theme
+        </span>
       </div>
       <div className={`toast${toast ? ' show' : ''}`} role="status">
         {toast}
