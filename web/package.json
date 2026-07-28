@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
+    "test": "vitest run",
     "test:e2e": "npm run build && playwright install chromium && playwright test --project=chromium-fake",
     "test:e2e:real": "playwright install chromium && playwright test --project=chromium-real",
     "test:e2e:install": "playwright install chromium"
@@ -24,6 +25,7 @@
     "@vitejs/plugin-react": "^6.0.3",
     "oxlint": "^1.71.0",
     "typescript": "~6.0.2",
-    "vite": "^8.1.1"
+    "vite": "^8.1.1",
+    "vitest": "^3.2.4"
   }
 }

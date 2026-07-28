@@ -21,6 +21,14 @@ Source plan: `~/.gstack/projects/portfolio/sls00-evidence-workbench-eng-review-2
 
 ## Completed
 
+### Review Mode narrative (Slice D)
+
+**What:** Claim-stage Review path checklist (per-home, observe-state steps, first-visit auto-open + Hide dismiss + `?` reopen) inside Approach B chrome — not Approach C as product.
+
+**Why:** Office-hours stretch post-B; hiring-reviewer orientation without new IA / live % / auto-Run.
+
+**Shipped:** 2026-07-28 on `feat/slice-d`. Eng+design plan: `~/.gstack/projects/portfolio/sls00-evidence-workbench-slice-d-eng-review-20260728.md`.
+
 ### Same-home run compare (Slice C)
 
 **What:** Same-home compare of ≤2 runs: side-by-side config/preset + JSON textual diff of `validation.json` or `bias_battery_summary.json` + verify status — not pixel HTML diff.

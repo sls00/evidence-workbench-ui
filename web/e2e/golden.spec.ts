@@ -107,6 +107,11 @@ test.describe('Slice B golden paths (fake runners)', () => {
     // Clear active view then reopen from library
     await page.getByRole('tab', { name: /Validation Review/i }).click()
     await page.getByRole('tab', { name: /Generator Console/i }).click()
+    // Slice D: collapse Review path so idle finding chrome is visible again
+    const reviewToggle = page.getByTestId('review-path-toggle')
+    if ((await reviewToggle.getAttribute('aria-expanded')) === 'true') {
+      await reviewToggle.click()
+    }
     await expect(page.getByTestId('finding-card')).toHaveAttribute('data-status', 'idle')
 
     const row = page.locator(`[data-testid="library-run"][data-run-id="${runId}"]`)
