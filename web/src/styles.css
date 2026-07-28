@@ -36,7 +36,14 @@
   --focus: #9A6B3C;
 }
 * { box-sizing: border-box; }
-html, body { height: 100%; margin: 0; }
+html, body { height: 100%; margin: 0; overflow: hidden; }
+#root {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+}
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -116,6 +123,11 @@ body {
 }
 .layout.rail-collapsed { --rail-w: var(--panel-collapsed-w); }
 .layout.lib-collapsed { --lib-w: var(--panel-collapsed-w); }
+.layout > .rail,
+.layout > .library,
+.layout > .cockpit {
+  min-height: 0;
+}
 .rail, .library {
   padding: 0; background: var(--bg-panel); min-width: 0;
   display: flex; flex-direction: column;
@@ -434,7 +446,7 @@ button.field {
   backdrop-filter: blur(8px); padding: 10px 14px;
   font-size: 11px; color: var(--text-muted);
   display: flex; flex-wrap: wrap; gap: 12px 18px;
-  position: sticky; bottom: 0; z-index: 20;
+  z-index: 20;
 }
 .keymap kbd {
   font-family: var(--font-mono); border: 1px solid var(--border);
