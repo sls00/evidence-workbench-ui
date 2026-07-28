@@ -768,7 +768,6 @@ export default function App() {
                               <div className="row" key={f.key}>
                                 <span className="noun">{f.key}</span>
                                 <span className="val">{formatInspectValue(f.value)}</span>
-                                <span />
                               </div>
                             ))}
                           </div>
