@@ -18,6 +18,12 @@ import {
   type RunSnapshot,
   type TimelinePayload,
 } from './api'
+import {
+  evaluateReviewPath,
+  readDismissed,
+  stepMark,
+  writeDismissed,
+} from './reviewPath'
 
 const OCC_SECTIONS = ['§I', '§II', '§III', '§IV', '§V', '§VI', '§VII'] as const
 
@@ -187,6 +193,7 @@ export default function App() {
   const [compareSelection, setCompareSelection] = useState<string[]>([])
   const [compare, setCompare] = useState<ComparePayload | null>(null)
   const [libGuideOpen, setLibGuideOpen] = useState(true)
+  const [reviewPathOpen, setReviewPathOpen] = useState(() => !readDismissed(homeFromUrl()))
 
   const showToast = useCallback((m: string) => {
     setToast(m)
@@ -226,8 +233,34 @@ export default function App() {
     setCompareSelection([])
     setCompare(null)
     setErrorBanner(null)
+    // Per-home dismiss: auto-open only when not dismissed for this home
+    setReviewPathOpen(!readDismissed(home))
     void refreshMeta(home).catch((e) => setErrorBanner(String(e)))
   }, [home, refreshMeta])
+
+  const reviewPath = useMemo(
+    () =>
+      evaluateReviewPath({
+        home,
+        canRun,
+        presetId,
+        busy,
+        active,
+      }),
+    [home, canRun, presetId, busy, active],
+  )
+
+  const setReviewPathExpanded = useCallback(
+    (open: boolean, opts?: { dismiss?: boolean }) => {
+      setReviewPathOpen(open)
+      if (opts?.dismiss) writeDismissed(home, true)
+    },
+    [home],
+  )
+
+  const toggleReviewPath = useCallback(() => {
+    setReviewPathOpen((v) => !v)
+  }, [])
 
   const loadPostRun = useCallback(async (runId: string) => {
     try {
@@ -342,6 +375,10 @@ export default function App() {
       if (ev.key === 'r' || ev.key === 'R') void onRun()
       if (ev.key === 'v' || ev.key === 'V') void onReverify()
       if (ev.key === 't' || ev.key === 'T') setTheme((th) => (th === 'dark' ? 'light' : 'dark'))
+      if (ev.key === '?') {
+        ev.preventDefault()
+        toggleReviewPath()
+      }
       if (ev.key === 'c' || ev.key === 'C') {
         const token = active?.config_hash || active?.run_id
         if (token) copyText(token, showToast)
@@ -349,7 +386,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [active?.config_hash, active?.run_id, onReverify, onRun, showToast])
+  }, [active?.config_hash, active?.run_id, onReverify, onRun, showToast, toggleReviewPath])
 
   const layoutClass = [
     'layout',
@@ -540,6 +577,64 @@ export default function App() {
 
           <main className="cockpit">
             <div className="stage-upper">
+              <div className="review-path" data-testid="review-path" aria-label="Review path">
+                <button
+                  type="button"
+                  className="review-path-toggle"
+                  aria-expanded={reviewPathOpen}
+                  aria-controls="review-path-body"
+                  data-testid="review-path-toggle"
+                  onClick={() => {
+                    if (reviewPathOpen) setReviewPathExpanded(false, { dismiss: true })
+                    else setReviewPathExpanded(true)
+                  }}
+                >
+                  <svg
+                    className="review-path-chevron"
+                    viewBox="0 0 16 16"
+                    aria-hidden="true"
+                    data-expanded={reviewPathOpen ? 'true' : 'false'}
+                  >
+                    <path
+                      d="M4 6l4 4 4-4"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  <span className="review-path-label">Review path</span>
+                  <span className="review-path-action">{reviewPathOpen ? 'Hide' : 'Show'}</span>
+                </button>
+                {reviewPathOpen && (
+                  <div className="review-path-body" id="review-path-body" data-testid="review-path-body">
+                    <p className="review-path-lead" data-testid="review-path-lead">
+                      {reviewPath.lead}
+                    </p>
+                    <ol className="review-path-list" data-testid="review-path-steps">
+                      {reviewPath.steps.map((step) => (
+                        <li
+                          key={step.id}
+                          className="review-step"
+                          data-state={step.state}
+                          data-step-id={step.id}
+                          aria-current={step.state === 'current' ? 'step' : undefined}
+                        >
+                          <span className="review-step-mark" aria-hidden="true">
+                            {stepMark(step.state)}
+                          </span>
+                          <span className="review-step-label">
+                            <strong>{step.title}</strong>
+                            {step.detail ? ` — ${step.detail}` : ''}
+                          </span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
+              </div>
+
               <div className="disclaimer">
                 Non-certification disclaimer (persistent): analytical / review-support only. Does not
                 constitute legal advice or a determination of compliance.
@@ -586,7 +681,7 @@ export default function App() {
                   </div>
                   <div className="sub">Coarse status only — no live stage stream (Slice A)</div>
                 </div>
-              ) : (
+              ) : reviewPathOpen ? null : (
                 <div className="finding-card" data-testid="finding-card" data-status="idle">
                   <div className="big" style={{ fontSize: 20, color: 'var(--text-muted)' }}>
                     No run yet
@@ -982,6 +1077,9 @@ export default function App() {
         </span>
         <span>
           <kbd>[</kbd>/<kbd>]</kbd> panels
+        </span>
+        <span>
+          <kbd>?</kbd> Review path
         </span>
         <span>
           <kbd>r</kbd> Run

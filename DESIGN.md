@@ -110,8 +110,17 @@
 ## Interaction — Keyboard-parity
 - Every primary action is clickable **and** keyable; shortcut shown on the control
 - Sticky footer keymap always visible (pattern from commitmono.com)
-- Suggested map: `1`/`2` homes · `[`/`]` panels · `r` Run · `v` Re-verify · `c` copy token · `t` theme
+- Suggested map: `1`/`2` homes · `[`/`]` panels · `?` Review path · `r` Run · `v` Re-verify · `c` copy token · `t` theme
 - Focus rings use `--accent`; no keyboard traps; respect browser shortcuts
+
+### Review path (Slice D — onboarding inside B)
+- Collapsible checklist at **top of claim stage, above disclaimer** (always-visible toggle row; keymap `?` mirrors)
+- First visit auto-opens per home until Hide → `localStorage` `ew.reviewPath.dismissed.{generator|validation}`
+- Chrome uses `--selection` left edge (like library Instructions / disclaimer) — never copper `--accent`
+- Steps observe live workbench state (no auto-Run); marks ✓/→/○ with text labels + `aria-current="step"`
+- While expanded and idle (no active/busy run), omit the “No run yet” finding card
+- On all steps done: stay open; lead = “Path complete — Hide or press ?” (no auto-collapse)
+- Approach C narrative is **onboarding only** — not a separate product shape
 
 ## Accessibility
 - WCAG AA contrast on default dark pairs
@@ -145,4 +154,4 @@ Slice A = shared chrome implementing these tokens + locked `finalized.html` comp
 | 2026-07-25 | Light: grey cockpit / white side panels | Restored after trial invert |
 | 2026-07-25 | Shotgun C′ dual-stage + A finding copper border | Approved visual direction for golden paths |
 | 2026-07-25 | `--selection` cool slate vs copper `--accent` | Finding stays focal; preset + active run + disclaimer edge still signal without copper competition |
-| 2026-07-26 | `/design-html` finalized.html locked (D6:A) | Production HTML reference = shotgun C′ spacing; Pretext deferred for short finding/disclaimer text |
+| 2026-07-28 | Review path (Slice D) claim-stage onboarding | Steal Approach C for first-run only; `--selection` chrome; observe steps; idle finding suppressed while expanded |

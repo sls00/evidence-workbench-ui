@@ -407,6 +407,112 @@ button.field {
   color: var(--text);
   font-weight: 500;
 }
+.review-path {
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--selection);
+  background: var(--bg-panel);
+  border-radius: var(--radius-sm);
+}
+.review-path-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.review-path-chevron {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  color: var(--selection);
+  transition: transform 0.15s ease-out;
+}
+.review-path-chevron[data-expanded="false"] {
+  transform: rotate(-90deg);
+}
+.review-path-label {
+  flex: 1;
+  min-width: 0;
+}
+.review-path-action {
+  flex-shrink: 0;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--text-muted);
+}
+.review-path-toggle:hover,
+.review-path-toggle[aria-expanded="true"] {
+  color: var(--text);
+}
+.review-path-toggle:hover .review-path-action,
+.review-path-toggle[aria-expanded="true"] .review-path-action {
+  color: var(--text);
+}
+.review-path-body {
+  padding: 0 10px 10px;
+}
+.review-path-lead {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 0 0 8px;
+  line-height: 1.4;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+.review-path-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.review-step {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 8px;
+  align-items: start;
+  padding: 5px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+}
+.review-step:first-child {
+  border-top: none;
+}
+.review-step[data-state="done"] .review-step-mark {
+  color: var(--pass);
+}
+.review-step[data-state="current"] {
+  color: var(--text);
+}
+.review-step[data-state="current"] .review-step-mark {
+  color: var(--selection);
+  font-weight: 600;
+}
+.review-step[data-state="todo"] .review-step-mark {
+  color: var(--border);
+}
+.review-step-mark {
+  font-size: 11px;
+  line-height: 1.4;
+}
+.review-step-label {
+  line-height: 1.4;
+}
+.review-step-label strong {
+  font-weight: 600;
+  color: inherit;
+}
 .compare-meta {
   display: grid;
   grid-template-columns: 1fr 1fr;
