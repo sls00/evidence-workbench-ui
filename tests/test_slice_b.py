@@ -30,7 +30,10 @@ def test_markdown_report_wrapped_as_html(client: TestClient):
     assert "text/html" in rep.headers.get("content-type", "")
     assert b"Fake OCC report" in rep.content
     assert b"markdown (engine artifact)" in rep.content
-    assert b"<pre class=\"md\">" in rep.content
+    assert b'class="md-body"' in rep.content
+    assert b'id="occ-i"' in rep.content
+    assert b"<pre class=\"md\">" not in rep.content
+    assert b"<h1>" in rep.content or b"<h2" in rep.content
 
 
 def test_timeline_generator_from_manifest(client: TestClient):

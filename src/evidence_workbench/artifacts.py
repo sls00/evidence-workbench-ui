@@ -608,47 +608,210 @@ def wrap_html_report_embed(html_text: str, *, title: str = "Report", theme: str 
 """
 
 
-def wrap_markdown_report(markdown_text: str, *, title: str = "Report") -> str:
-    """Minimal HTML shell using DESIGN.md tokens — no metric invention."""
-    # Escape is intentional-light: reports are local trusted engine output.
-    body = (
-        markdown_text.replace("&", "&amp;")
+_OCC_HEADING_RE = re.compile(
+    r"(?:§\s*(VII|VI|V|IV|III|II|I)\b|(?<![A-Za-z0-9])(VII|VI|V|IV|III|II|I)\.)",
+    re.I,
+)
+
+
+def _escape_html(text: str) -> str:
+    return (
+        text.replace("&", "&amp;")
         .replace("<", "&lt;")
         .replace(">", "&gt;")
+        .replace('"', "&quot;")
     )
+
+
+def _inline_md(text: str) -> str:
+    """Escape then apply a small set of inline markdown transforms."""
+    out = _escape_html(text)
+    out = re.sub(r"`([^`]+)`", r"<code>\1</code>", out)
+    out = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", out)
+    out = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"<em>\1</em>", out)
+    out = re.sub(r"(?<!_)_([^_]+)_(?!_)", r"<em>\1</em>", out)
+    return out
+
+
+def _occ_id_from_heading(plain: str) -> str | None:
+    m = _OCC_HEADING_RE.search(plain.strip())
+    if not m:
+        return None
+    roman = (m.group(1) or m.group(2) or "").upper()
+    return f"occ-{roman.lower()}" if roman else None
+
+
+def render_markdown_html(markdown_text: str) -> str:
+    """Render trusted engine markdown to HTML (headings/lists/paragraphs/code).
+
+    Headings that match OCC §I–§VII / ``I.``…``VII.`` get ``id="occ-i"``…``occ-vii``
+    so Validation chrome can scroll the report iframe.
+    """
+    lines = markdown_text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    parts: list[str] = []
+    i = 0
+    in_code = False
+    code_lang = ""
+    code_buf: list[str] = []
+    list_kind: str | None = None  # "ul" | "ol"
+
+    def close_list() -> None:
+        nonlocal list_kind
+        if list_kind:
+            parts.append(f"</{list_kind}>")
+            list_kind = None
+
+    def flush_code() -> None:
+        nonlocal in_code, code_lang, code_buf
+        body = _escape_html("\n".join(code_buf))
+        cls = f' class="language-{_escape_html(code_lang)}"' if code_lang else ""
+        parts.append(f"<pre><code{cls}>{body}</code></pre>")
+        in_code = False
+        code_lang = ""
+        code_buf = []
+
+    while i < len(lines):
+        line = lines[i]
+        if in_code:
+            if line.startswith("```"):
+                flush_code()
+            else:
+                code_buf.append(line)
+            i += 1
+            continue
+
+        fence = re.match(r"^```([\w+-]*)\s*$", line)
+        if fence:
+            close_list()
+            in_code = True
+            code_lang = fence.group(1) or ""
+            code_buf = []
+            i += 1
+            continue
+
+        heading = re.match(r"^(#{1,6})\s+(.+?)\s*$", line)
+        if heading:
+            close_list()
+            level = len(heading.group(1))
+            plain = heading.group(2).strip()
+            occ_id = _occ_id_from_heading(plain)
+            id_attr = f' id="{occ_id}"' if occ_id else ""
+            parts.append(f"<h{level}{id_attr}>{_inline_md(plain)}</h{level}>")
+            i += 1
+            continue
+
+        hr = re.match(r"^(?:-{3,}|\*{3,}|_{3,})\s*$", line)
+        if hr:
+            close_list()
+            parts.append("<hr/>")
+            i += 1
+            continue
+
+        ul = re.match(r"^[-*+]\s+(.+)$", line)
+        if ul:
+            if list_kind != "ul":
+                close_list()
+                parts.append("<ul>")
+                list_kind = "ul"
+            parts.append(f"<li>{_inline_md(ul.group(1).strip())}</li>")
+            i += 1
+            continue
+
+        ol = re.match(r"^(\d+)[.)]\s+(.+)$", line)
+        if ol:
+            if list_kind != "ol":
+                close_list()
+                parts.append("<ol>")
+                list_kind = "ol"
+            parts.append(f"<li>{_inline_md(ol.group(2).strip())}</li>")
+            i += 1
+            continue
+
+        if not line.strip():
+            close_list()
+            i += 1
+            continue
+
+        close_list()
+        para = [line]
+        i += 1
+        while i < len(lines) and lines[i].strip() and not re.match(
+            r"^(#{1,6}\s|```|[-*+]\s|\d+[.)]\s|-{3,}|\*{3,}|_{3,})",
+            lines[i],
+        ):
+            para.append(lines[i])
+            i += 1
+        parts.append(f"<p>{_inline_md(' '.join(s.strip() for s in para))}</p>")
+
+    if in_code:
+        flush_code()
+    close_list()
+    return "\n".join(parts)
+
+
+def wrap_markdown_report(markdown_text: str, *, title: str = "Report", theme: str = "dark") -> str:
+    """HTML shell with rendered markdown — DESIGN.md tokens; no metric invention."""
+    tokens = _report_theme_tokens(theme if theme == "light" else "dark")
+    safe_title = _escape_html(title)
+    body = render_markdown_html(markdown_text)
     return f"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>{title}</title>
+<meta name="color-scheme" content="{theme if theme == "light" else "dark"}"/>
+<title>{safe_title}</title>
 <style>
   :root {{
-    --bg: #0E1114; --panel: #161B20; --elevated: #1E252C; --border: #2A333C;
-    --text: #E8EAED; --muted: #9AA3AD; --accent: #D4A574; --selection: #7A93A8;
+    --bg: {tokens["bg"]}; --panel: {tokens["panel"]}; --elevated: {tokens["elevated"]};
+    --border: {tokens["border"]}; --text: {tokens["text"]}; --muted: {tokens["muted"]};
+    --accent: {tokens["accent"]}; --selection: {tokens["selection"]};
     --font: "Commit Mono", "CommitMono", ui-monospace, monospace;
     --display: "Cabinet Grotesk", "CabinetGrotesk", system-ui, sans-serif;
   }}
   html, body {{ margin: 0; padding: 0; background: var(--bg); color: var(--text);
-    font-family: var(--font); font-size: 14px; line-height: 1.55; }}
+    font-family: var(--font); font-size: 14px; line-height: 1.55;
+    color-scheme: {theme if theme == "light" else "dark"}; }}
   .wrap {{ max-width: 52rem; margin: 0 auto; padding: 16px 18px 32px; }}
   .eyebrow {{ font-size: 11px; color: var(--muted); letter-spacing: 0.04em;
     border-left: 2px solid var(--selection); padding-left: 8px; margin-bottom: 12px; }}
-  pre.md {{
-    white-space: pre-wrap; word-break: break-word;
-    background: var(--elevated); border: 1px solid var(--border);
-    border-left: 2px solid var(--accent); border-radius: 4px;
-    padding: 14px 16px; margin: 0; font: inherit; color: var(--text);
-  }}
   h1.title {{ font-family: var(--display); font-size: 20px; font-weight: 600;
     margin: 0 0 12px; color: var(--text); }}
+  .md-body {{
+    background: var(--elevated); border: 1px solid var(--border);
+    border-left: 2px solid var(--accent); border-radius: 4px;
+    padding: 14px 16px; color: var(--text);
+  }}
+  .md-body h1, .md-body h2, .md-body h3, .md-body h4, .md-body h5, .md-body h6 {{
+    font-family: var(--display); font-weight: 600; line-height: 1.3;
+    margin: 1.1em 0 0.45em; color: var(--text); scroll-margin-top: 12px;
+  }}
+  .md-body h1 {{ font-size: 22px; }}
+  .md-body h2 {{ font-size: 18px; }}
+  .md-body h3 {{ font-size: 16px; }}
+  .md-body p {{ margin: 0 0 0.75em; overflow-wrap: anywhere; }}
+  .md-body ul, .md-body ol {{ margin: 0 0 0.75em; padding-left: 1.35em; }}
+  .md-body li {{ margin: 0.2em 0; overflow-wrap: anywhere; }}
+  .md-body code {{
+    font-family: var(--font); font-size: 0.92em;
+    background: color-mix(in srgb, var(--bg) 55%, transparent);
+    border: 1px solid var(--border); border-radius: 2px; padding: 0 4px;
+  }}
+  .md-body pre {{
+    overflow-x: auto; margin: 0 0 0.85em; padding: 10px 12px;
+    background: color-mix(in srgb, var(--bg) 70%, transparent);
+    border: 1px solid var(--border); border-radius: 4px;
+  }}
+  .md-body pre code {{ background: none; border: none; padding: 0; }}
+  .md-body hr {{ border: none; border-top: 1px solid var(--border); margin: 1.2em 0; }}
+  .md-body a {{ color: var(--accent); }}
 </style>
 </head>
 <body>
   <div class="wrap">
     <p class="eyebrow">Review-support report · markdown (engine artifact)</p>
-    <h1 class="title">{title}</h1>
-    <pre class="md">{body}</pre>
+    <h1 class="title">{safe_title}</h1>
+    <div class="md-body">{body}</div>
   </div>
 </body>
 </html>

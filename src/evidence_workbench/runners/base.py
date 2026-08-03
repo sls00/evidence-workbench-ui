@@ -287,7 +287,40 @@ class FakeRunner:
         config_hash = hash_by_preset.get(self._preset_id or "", "wb_fake_cafebabe")
         report = run_dir / "german_credit_validation_report.md"
         report.write_text(
-            "# Fake OCC report\n\n## §I Scope\n\nDisclaimer.\n\n## §II Limitations\n\nLimits.\n",
+            "\n".join(
+                [
+                    "# Fake OCC report",
+                    "",
+                    "## §I Introduction",
+                    "",
+                    "Disclaimer and run framing.",
+                    "",
+                    "## §II Purpose and Scope",
+                    "",
+                    "Limits and intended use.",
+                    "",
+                    "## §III Overview of Model Risk",
+                    "",
+                    "MRM overview (stub).",
+                    "",
+                    "## §IV Model Development and Use",
+                    "",
+                    "Methodology stub.",
+                    "",
+                    "## §V Outcomes Analysis",
+                    "",
+                    "Bias / outcomes stub.",
+                    "",
+                    "## §VI Ongoing Monitoring",
+                    "",
+                    "Drift / monitoring stub.",
+                    "",
+                    "## §VII Vendor and Third-Party",
+                    "",
+                    "Vendor notes (stub).",
+                    "",
+                ]
+            ),
             encoding="utf-8",
         )
         verify = "PASS" if status == "ok" else ("FAIL" if status == "failed" else "PASS")

@@ -26,6 +26,8 @@ test.describe('Slice B golden paths (fake runners)', () => {
     await expect(page.getByTestId('timeline-pane').locator('.timeline-row').first()).toBeVisible()
     await expect(page.getByTestId('inspect-pane').locator('.inspect-well').first()).toBeVisible()
     await expect(page.getByTestId('inspect-pane')).toContainText(/Pillars|Bias metrics/i)
+    await page.getByTestId('stage-output').click()
+    await expect(page.locator('.proof-deck .row:has(.noun:text("run_id")) .val')).not.toHaveText('—')
   })
 
   test('Validation gc_full → finding + Verify control', async ({ page }) => {
@@ -45,6 +47,9 @@ test.describe('Slice B golden paths (fake runners)', () => {
     await expect(page.getByTestId('verify-chip')).toContainText(/verify=/i)
     await expect(page.getByTestId('timeline-pane')).toBeVisible()
     await expect(page.getByTestId('inspect-pane')).toBeVisible()
+    await page.getByTestId('stage-output').click()
+    await expect(page.locator('.occ-nav button').first()).toBeVisible()
+    await expect(page.locator('iframe[title="Report"]')).toBeVisible()
   })
 
   test('Cancel → incomplete honesty', async ({ page }) => {
@@ -101,6 +106,7 @@ test.describe('Slice B golden paths (fake runners)', () => {
     await page.locator('[data-action="run"]').click()
     await waitTerminal(page)
     const title = await page.getByTestId('finding-title').innerText()
+    await page.getByTestId('stage-output').click()
     const runId = await page.locator('.proof-deck .val').first().innerText()
     expect(runId).not.toBe('—')
 
@@ -118,6 +124,7 @@ test.describe('Slice B golden paths (fake runners)', () => {
     await expect(row).toBeVisible()
     await row.click()
     await expect(page.getByTestId('finding-title')).toHaveText(title)
+    await page.getByTestId('stage-output').click()
     await expect(page.locator('iframe[title="Report"]')).toBeVisible()
   })
 
@@ -126,13 +133,16 @@ test.describe('Slice B golden paths (fake runners)', () => {
     await page.locator('[data-action="run"]').click()
     await expect(page.getByTestId('finding-card')).toHaveAttribute('data-status', 'running')
     await waitTerminal(page)
+    await page.getByTestId('stage-output').click()
     const firstRunId = await page.locator('.proof-deck .row:has(.noun:text("run_id")) .val').innerText()
 
     // Second run with different preset (scope to Controls rail — library also has preset labels)
+    await page.getByTestId('stage-manifest').click()
     await page.locator('.rail button.field', { hasText: 'rate_shock_1k' }).click()
     await page.locator('[data-action="run"]').click()
     await expect(page.getByTestId('finding-card')).toHaveAttribute('data-status', 'running')
     await waitTerminal(page)
+    await page.getByTestId('stage-output').click()
     await expect
       .poll(async () => page.locator('.proof-deck .row:has(.noun:text("run_id")) .val').innerText())
       .not.toBe(firstRunId)
@@ -147,6 +157,7 @@ test.describe('Slice B golden paths (fake runners)', () => {
     await expect(secondRow).toBeVisible()
     await secondRow.click({ modifiers: ['Shift'] })
 
+    await page.getByTestId('stage-manifest').click()
     await expect(page.getByTestId('compare-pane')).toBeVisible({ timeout: 10_000 })
     await expect(page.getByTestId('compare-pane')).toContainText(/validation\.json/i)
     await expect(page.locator('.compare-diff')).toContainText(/subgroup_gap_pp/)

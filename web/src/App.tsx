@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react'
 import {
   cancelRun,
   fetchCompare,
@@ -26,6 +33,17 @@ import {
 } from './reviewPath'
 
 const OCC_SECTIONS = ['§I', '§II', '§III', '§IV', '§V', '§VI', '§VII'] as const
+const OCC_HASH: Record<(typeof OCC_SECTIONS)[number], string> = {
+  '§I': 'occ-i',
+  '§II': 'occ-ii',
+  '§III': 'occ-iii',
+  '§IV': 'occ-iv',
+  '§V': 'occ-v',
+  '§VI': 'occ-vi',
+  '§VII': 'occ-vii',
+}
+const GITHUB_URL = 'https://github.com/sls00'
+type StagePanel = 'manifest' | 'output'
 
 function homeFromUrl(): Home {
   const q = new URLSearchParams(window.location.search).get('home')
@@ -187,6 +205,7 @@ export default function App() {
   const [settle, setSettle] = useState(false)
   const [toast, setToast] = useState('')
   const [occ, setOcc] = useState<(typeof OCC_SECTIONS)[number]>('§I')
+  const [stagePanel, setStagePanel] = useState<StagePanel>('manifest')
   const [errorBanner, setErrorBanner] = useState<string | null>(null)
   const [timeline, setTimeline] = useState<TimelinePayload | null>(null)
   const [inspect, setInspect] = useState<InspectPayload | null>(null)
@@ -194,6 +213,7 @@ export default function App() {
   const [compare, setCompare] = useState<ComparePayload | null>(null)
   const [libGuideOpen, setLibGuideOpen] = useState(true)
   const [reviewPathOpen, setReviewPathOpen] = useState(() => !readDismissed(homeFromUrl()))
+  const reportIframeRef = useRef<HTMLIFrameElement | null>(null)
 
   const showToast = useCallback((m: string) => {
     setToast(m)
@@ -233,6 +253,8 @@ export default function App() {
     setCompareSelection([])
     setCompare(null)
     setErrorBanner(null)
+    setStagePanel('manifest')
+    setOcc('§I')
     // Per-home dismiss: auto-open only when not dismissed for this home
     setReviewPathOpen(!readDismissed(home))
     void refreshMeta(home).catch((e) => setErrorBanner(String(e)))
@@ -363,6 +385,32 @@ export default function App() {
     showToast(`Verify ${snap.verify_status || 'done'}`)
   }, [active?.run_id, home, showToast])
 
+  const scrollOccSection = useCallback((section: (typeof OCC_SECTIONS)[number]) => {
+    const hash = OCC_HASH[section]
+    const frame = reportIframeRef.current
+    if (!frame?.contentWindow || !hash) return
+    try {
+      const doc = frame.contentDocument
+      const el = doc?.getElementById(hash)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        return
+      }
+      frame.contentWindow.location.hash = hash
+    } catch {
+      /* same-origin report iframe only */
+    }
+  }, [])
+
+  const selectOcc = useCallback(
+    (section: (typeof OCC_SECTIONS)[number]) => {
+      setOcc(section)
+      setStagePanel('output')
+      window.setTimeout(() => scrollOccSection(section), 50)
+    },
+    [scrollOccSection],
+  )
+
   // Keyboard map
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
@@ -370,6 +418,12 @@ export default function App() {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
       if (ev.key === '1') setHome('generator')
       if (ev.key === '2') setHome('validation')
+      if (ev.key === 'm' || ev.key === 'M') setStagePanel('manifest')
+      if (ev.key === 'o' || ev.key === 'O') setStagePanel('output')
+      if (ev.key === 'g' || ev.key === 'G') {
+        ev.preventDefault()
+        window.open(GITHUB_URL, '_blank', 'noopener,noreferrer')
+      }
       if (ev.key === '[') setRailOpen((v) => !v)
       if (ev.key === ']') setLibOpen((v) => !v)
       if (ev.key === 'r' || ev.key === 'R') void onRun()
@@ -437,6 +491,13 @@ export default function App() {
       ? `${active.report_url}?theme=${theme}`
       : null
 
+  useEffect(() => {
+    if (stagePanel !== 'output' || home !== 'validation' || !reportSrc) return
+    window.setTimeout(() => scrollOccSection(occ), 80)
+  }, [stagePanel, home, occ, scrollOccSection, reportSrc])
+
+  const preflightAlerts = checks.filter((c) => c.status !== 'ok')
+
   return (
     <div className="app">
       <div className="shell">
@@ -467,10 +528,32 @@ export default function App() {
         </div>
 
         <div className="preflight" aria-live="polite">
-          {checks.map((c, i) => (
+          <div className="stage-switcher" role="tablist" aria-label="Primary evidence panels">
+            <button
+              type="button"
+              role="tab"
+              className={`stage-tab${stagePanel === 'manifest' ? ' active' : ''}`}
+              aria-selected={stagePanel === 'manifest'}
+              data-testid="stage-manifest"
+              onClick={() => setStagePanel('manifest')}
+            >
+              <kbd>m</kbd> manifest
+            </button>
+            <button
+              type="button"
+              role="tab"
+              className={`stage-tab${stagePanel === 'output' ? ' active' : ''}`}
+              aria-selected={stagePanel === 'output'}
+              data-testid="stage-output"
+              onClick={() => setStagePanel('output')}
+            >
+              <kbd>o</kbd> output
+            </button>
+          </div>
+          {preflightAlerts.map((c, i) => (
             <span
               key={c.id}
-              className={`pf ${c.status === 'ok' ? 'ok' : c.status === 'warn' ? 'warn' : ''}`}
+              className={`pf ${c.status === 'warn' ? 'warn' : ''}`}
               style={{
                 color: c.status === 'blocker' ? 'var(--fail)' : undefined,
                 animationDelay: `${i * 40}ms`,
@@ -575,7 +658,8 @@ export default function App() {
             {railOpen && <PanelResizer side="rail" onDrag={onResizeRail} />}
           </aside>
 
-          <main className="cockpit">
+          <main className="cockpit" data-stage={stagePanel}>
+            {stagePanel === 'manifest' && (
             <div className="stage-upper">
               <div className="review-path" data-testid="review-path" aria-label="Review path">
                 <button
@@ -699,21 +783,6 @@ export default function App() {
                         <StatusDot state={p.state} />
                       </span>
                     </div>
-                  ))}
-                </div>
-              )}
-
-              {home === 'validation' && (
-                <div className="occ-nav" role="navigation" aria-label="OCC sections">
-                  {OCC_SECTIONS.map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      className={occ === s ? 'active' : ''}
-                      onClick={() => setOcc(s)}
-                    >
-                      {s}
-                    </button>
                   ))}
                 </div>
               )}
@@ -873,11 +942,28 @@ export default function App() {
                 </section>
               )}
             </div>
+            )}
 
+            {stagePanel === 'output' && (
             <div className="stage-lower">
               <p className="stage-label">
                 {home === 'generator' ? 'Proof deck · integrity' : 'Proof deck · verify-chain'}
               </p>
+              {home === 'validation' && (
+                <div className="occ-nav" role="navigation" aria-label="OCC report sections">
+                  {OCC_SECTIONS.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      className={occ === s ? 'active' : ''}
+                      onClick={() => selectOcc(s)}
+                      title={`Jump to ${s} in review-support report`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="proof-deck">
                 <div className="well">
                   <p className="integrity-label">
@@ -927,14 +1013,18 @@ export default function App() {
                     </div>
                   )}
                 </div>
-                <div>
+                <div className="proof-report">
                   {reportSrc ? (
                     <iframe
+                      ref={reportIframeRef}
                       title="Report"
                       src={reportSrc}
+                      onLoad={() => {
+                        if (home === 'validation') scrollOccSection(occ)
+                      }}
                       style={{
                         width: '100%',
-                        minHeight: 220,
+                        minHeight: 320,
                         border: '1px solid var(--border)',
                         borderRadius: 'var(--radius-md)',
                         background: 'var(--bg-elevated)',
@@ -948,6 +1038,7 @@ export default function App() {
                 </div>
               </div>
             </div>
+            )}
           </main>
 
           <aside className="library" aria-label="Run library">
@@ -1076,6 +1167,9 @@ export default function App() {
           <kbd>1</kbd>/<kbd>2</kbd> homes
         </span>
         <span>
+          <kbd>m</kbd>/<kbd>o</kbd> manifest/output
+        </span>
+        <span>
           <kbd>[</kbd>/<kbd>]</kbd> panels
         </span>
         <span>
@@ -1093,6 +1187,9 @@ export default function App() {
         <span>
           <kbd>t</kbd> theme
         </span>
+        <a className="keymap-link" href={GITHUB_URL} target="_blank" rel="noopener noreferrer">
+          <kbd>g</kbd> github
+        </a>
       </div>
       <div className={`toast${toast ? ' show' : ''}`} role="status">
         {toast}

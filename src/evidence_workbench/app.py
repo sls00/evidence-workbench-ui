@@ -200,7 +200,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         if suffix in {".md", ".markdown"}:
             text = path.read_text(encoding="utf-8")
-            html = wrap_markdown_report(text, title=path.name)
+            html = wrap_markdown_report(text, title=path.name, theme=theme)
             out_name = f"{path.stem}.html"
             return HTMLResponse(
                 html,
