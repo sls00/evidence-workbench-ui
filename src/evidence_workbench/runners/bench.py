@@ -315,7 +315,6 @@ class BenchRunner:
 
 def _find_report(run_dir: Path) -> str | None:
     for name in (
-        "german_credit_validation_report.md",
         "validation_report.md",
         "report.md",
         "report.html",

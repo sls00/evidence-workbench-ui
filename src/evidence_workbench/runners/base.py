@@ -285,7 +285,7 @@ class FakeRunner:
         }
         battery = battery_by_preset.get(self._preset_id or "", battery_by_preset["gc_full"])
         config_hash = hash_by_preset.get(self._preset_id or "", "wb_fake_cafebabe")
-        report = run_dir / "german_credit_validation_report.md"
+        report = run_dir / "validation_report.md"
         report.write_text(
             "# Fake OCC report\n\n## §I Scope\n\nDisclaimer.\n\n## §II Limitations\n\nLimits.\n",
             encoding="utf-8",

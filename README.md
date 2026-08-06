@@ -1,22 +1,26 @@
-# Evidence Workbench UI
+# Evidence Workbench
 
-Local **Evidence Workbench** — a dual-home review instrument that orchestrates [`synth-fin`](https://github.com/sls00/synth-fin) and [`ai-mrg-bench`](https://github.com/sls00/ai-mrg-bench) and presents their proof. CLI/SDK remain canonical. Memorable signal: *You can see the proof.*
+A review instrument for credit models. It runs the bias, drift, and fairness tests an independent validator would run, then shows the evidence behind every result: the metrics, the report section they belong to, and the audit chain binding them together. **No run displays a passing status unless its audit chain verifies.**
 
-![Evidence Workbench — Generator Console (locked C′ chrome)](docs/images/hero-generator-console.png)
+It runs locally and drives two engines — [`synth-fin`](https://github.com/sls00/synth-fin) generates the test panel, [`ai-mrg-bench`](https://github.com/sls00/ai-mrg-bench) validates the model against it — presenting both in one place. Their CLIs stay canonical; this shell never recomputes or restates their numbers.
 
-<p align="center"><sub>Locked visual reference (C′ dual-stage). Copper = finding/proof; cool slate = chrome selection.</sub></p>
+![Evidence Workbench — Generator Console](docs/images/hero-generator-console.png)
+
+<p align="center"><sub><b>Generator Console</b> — building the synthetic loan panel a validation run will be tested against, with privacy and fidelity checks shown as they complete.</sub></p>
 
 ![Evidence Workbench — Validation Review](docs/images/hero-validation-review.png)
 
-<p align="center"><sub>Validation home with OCC § nav, Re-verify, and verify-chain proof deck.</sub></p>
+<p align="center"><sub><b>Validation Review</b> — the OCC seven-section report with section navigation, and a proof deck that re-verifies the audit chain on demand.</sub></p>
+
+Want to read the output without installing anything? [`ai-mrg-bench/docs/examples/`](https://github.com/sls00/ai-mrg-bench/tree/main/docs/examples) has a committed validation report and its audit-chain verification.
 
 ## What this is / is not
 
 | Is | Is not |
 | --- | --- |
-| Local FastAPI + Vite/React shell | Multi-tenant GRC SaaS |
-| Orchestrates engines; embeds reports | Shadow metrics / rewritten validators |
-| Approach B dual home (Generator + Validation) | Streamlit forever / Next.js cre_uw clone |
+| A local FastAPI + Vite/React shell | A multi-tenant GRC SaaS product |
+| An orchestrator that embeds the engines' own reports | A second implementation of their metrics |
+| Two homes in one tool: Generator and Validation | A compliance determination of any kind |
 
 ## Quick start
 
@@ -24,7 +28,8 @@ Local **Evidence Workbench** — a dual-home review instrument that orchestrates
 uv sync --group dev
 uv run evidence-workbench --home generator --fake-runners
 # → http://127.0.0.1:8765/?home=generator
-# On WSL, binds 0.0.0.0 by default so Windows/Cursor can reach it (see below).
+# On WSL, binds 0.0.0.0 by default so Windows can reach it.
+# See docs/wsl-cursor-browser.md if your browser can't connect.
 ```
 
 Hot-reload UI (API already running on `:8765`):
@@ -39,10 +44,6 @@ Real engines (siblings keep their own uv envs):
 export SYNTH_FIN_ROOT=../synth-fin AI_MRG_BENCH_ROOT=../ai-mrg-bench
 uv run evidence-workbench --home generator
 ```
-
-### WSL + Cursor IDE browser
-
-Cursor’s browser runs on **Windows**; this server runs in **WSL**. Durable fix: `networkingMode=mirrored` in `%UserProfile%\.wslconfig`, then `wsl --shutdown` (see [docs/wsl-cursor-browser.md](docs/wsl-cursor-browser.md)). Fallback: `scripts/wsl-windows-portbridge.ps1` (Admin).
 
 ## Deep-links
 
@@ -100,4 +101,4 @@ Playwright runs inside the runner against `127.0.0.1` (not Windows Cursor browse
 
 ## License
 
-[Blue Oak Model License 1.0.0](https://blueoakcouncil.org/license/1.0.0) — see [`LICENSE`](LICENSE).
+[Blue Oak Model License 1.0.0](https://blueoakcouncil.org/license/1.0.0) — Copyright © 2026 Steven L. Sorenson. See [`LICENSE`](LICENSE).

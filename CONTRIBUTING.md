@@ -34,5 +34,12 @@ Mandatory smoke (already in CI): cancel → `incomplete` + lock reclaim.
 ## Deep-links
 Engine CLIs exec this binary by PATH name only (`synth-fin ui` / `workbench ui`). **Never** `import evidence_workbench` from those packages.
 
+## Contributor License Agreement
+Before your first pull request is merged, read [`CLA.md`](CLA.md) and include this line in the PR description:
+
+> I have read and agree to the Contributor License Agreement in `CLA.md`.
+
+Sign off your commits too (`git commit -s`). You keep the copyright to your work; the CLA grants the Maintainer the right to distribute it, including under different license terms in the future.
+
 ## License
-[Blue Oak Model License 1.0.0](https://blueoakcouncil.org/license/1.0.0) — see `LICENSE`.
+[Blue Oak Model License 1.0.0](https://blueoakcouncil.org/license/1.0.0) — Copyright © 2026 Steven L. Sorenson. See `LICENSE`.
