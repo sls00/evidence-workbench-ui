@@ -112,15 +112,20 @@ test.describe('Slice B golden paths (fake runners)', () => {
     const runId = await page.locator('.proof-deck .val').first().innerText()
     expect(runId).not.toBe('—')
 
-    // Clear active view then reopen from library
+    // Round-trip through the other home, then reopen from library.
     await page.getByRole('tab', { name: /Validation Review/i }).click()
     await page.getByRole('tab', { name: /Generator Console/i }).click()
-    // Slice D: collapse Review path so idle finding chrome is visible again
+    // Slice D: collapse Review path so the finding chrome is visible again
     const reviewToggle = page.getByTestId('review-path-toggle')
     if ((await reviewToggle.getAttribute('aria-expanded')) === 'true') {
       await reviewToggle.click()
     }
-    await expect(page.getByTestId('finding-card')).toHaveAttribute('data-status', 'idle')
+    // Runs now persist across home switches, so the card keeps the completed
+    // run's status instead of resetting to idle.
+    await expect(page.getByTestId('finding-card')).toHaveAttribute(
+      'data-status',
+      /ok|qualified/,
+    )
 
     const row = page.locator(`[data-testid="library-run"][data-run-id="${runId}"]`)
     await expect(row).toBeVisible()
