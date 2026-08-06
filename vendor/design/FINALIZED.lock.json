@@ -1,8 +1,8 @@
 {
   "locked_at": "2026-07-26T04:37:46Z",
-  "path": "/home/sls00/.gstack/projects/portfolio/designs/evidence-workbench-golden-20260725/finalized.html",
+  "path": "gstack:designs/evidence-workbench-golden-20260725/finalized.html",
   "sha256": "da74c3aaaf0dc78c125222fcb8f75dd8a8fd0e8f615f7d1ee479f14597b00e7f",
   "skill": "design-html",
   "decision": "D6:A",
-  "design_md": "/home/sls00/portfolio/evid-wb-ui/DESIGN.md"
+  "design_md": "DESIGN.md"
 }
