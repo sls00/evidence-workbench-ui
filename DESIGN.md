@@ -77,11 +77,11 @@
 
 ## Layout
 - **Approach:** Grid-disciplined workbench shell; one composition per home
-- **Golden-path composition (locked C′):** **Dual-stage cockpit**
-  - **Upper (claim stage):** disclaimer → finding → pillars (Generator) or OCC §I–VII nav (Validation)
-  - **Lower (proof deck):** integrity / verify-chain well (+ chain segments on Validation)
-- **Default panel state on load:** Controls **expanded**; Run library **collapsed** (compact summary). Toggles remain Cursor-like.
-- **Regions:** Brand header → home tabs → preflight bar → Controls | Evidence cockpit | Run library → sticky keymap footer
+- **Golden-path composition (locked C′):** **Switchable dual-stage cockpit** (one panel full at a time)
+  - **Manifest (`m`):** disclaimer → finding → pillars (Generator) or post-run timeline/inspect; claim-stage chrome
+  - **Output (`o`):** proof deck — integrity / verify-chain well stacked above full-width report; Validation OCC §I–VII nav scrolls report sections
+- **Default panel state on load:** Controls **expanded**; Run library **collapsed** (compact summary); primary panel **manifest**. Toggles remain Cursor-like.
+- **Regions:** Brand header → home tabs → primary-panel switcher (+ preflight alerts) → Controls | Evidence cockpit | Run library → sticky keymap footer
 - **Brand:** “Evidence Workbench” is header-scale (Cabinet), not an eyebrow
 - **Collapsible panels (Cursor-like):**
   - Toggle on Controls and Run library headers; shortcuts `[` / `]`
@@ -89,7 +89,7 @@
   - Collapsed body is a **compact summary** (preset + Run / active run id + count) — never a width-truncated full form
 - **Homes:**
   - **Generator Console (synth-fin):** presets → Run → disclaimer → finding (ground-truth bias) → pillars → integrity well → report (HTML iframe; disclaimer also outside iframe)
-  - **Validation Review (ai-mrg-bench):** presets → Run / Re-verify → §I+§II pinned → finding → OCC §I–VII nav → verify-chain well
+  - **Validation Review (ai-mrg-bench):** presets → Run / Re-verify → finding → output panel with OCC §I–VII nav → verify-chain well + rendered report
 - **Disclaimer / evidence hierarchy (strict):**
   1. Header meta (local · review-support only · not a compliance determination)
   2. Home disclaimer strip above finding (left edge = `--selection`)
@@ -110,7 +110,8 @@
 ## Interaction — Keyboard-parity
 - Every primary action is clickable **and** keyable; shortcut shown on the control
 - Sticky footer keymap always visible (pattern from commitmono.com)
-- Suggested map: `1`/`2` homes · `[`/`]` panels · `?` Review path · `r` Run · `v` Re-verify · `c` copy token · `t` theme
+- Suggested map: `1`/`2` homes · `m`/`o` manifest/output · `[`/`]` panels · `?` Review path · `r` Run · `v` Re-verify · `c` copy token · `t` theme · `g` github
+- **Primary evidence panels:** one full-height panel at a time — **manifest** (claim / timeline / inspect) or **output** (proof deck). Clickable chrome + keymap; both homes share the same keys.
 - Focus rings use `--accent`; no keyboard traps; respect browser shortcuts
 
 ### Review path (Slice D — onboarding inside B)
@@ -154,4 +155,4 @@ Slice A = shared chrome implementing these tokens + locked `finalized.html` comp
 | 2026-07-25 | Light: grey cockpit / white side panels | Restored after trial invert |
 | 2026-07-25 | Shotgun C′ dual-stage + A finding copper border | Approved visual direction for golden paths |
 | 2026-07-25 | `--selection` cool slate vs copper `--accent` | Finding stays focal; preset + active run + disclaimer edge still signal without copper competition |
-| 2026-07-28 | Review path (Slice D) claim-stage onboarding | Steal Approach C for first-run only; `--selection` chrome; observe steps; idle finding suppressed while expanded |
+| 2026-08-03 | Switchable manifest/output panels + stacked proof deck | Full-height primary panel; `m`/`o` parity; OCC nav scrolls rendered report; wrap overflow; `g` github |

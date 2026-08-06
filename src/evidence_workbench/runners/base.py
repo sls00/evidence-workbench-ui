@@ -114,7 +114,11 @@ def _env_fake_delay(default: float = 0.15) -> float:
 
 
 def _env_fake_hang() -> bool:
-    return os.environ.get("EVIDENCE_FAKE_RUNNER_HANG", "").lower() in {"1", "true", "yes"}
+    return os.environ.get("EVIDENCE_FAKE_RUNNER_HANG", "").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
 
 
 class FakeRunner:
@@ -129,7 +133,9 @@ class FakeRunner:
         hang: bool | None = None,
     ) -> None:
         self.home = home
-        self.delay_seconds = _env_fake_delay() if delay_seconds is None else delay_seconds
+        self.delay_seconds = (
+            _env_fake_delay() if delay_seconds is None else delay_seconds
+        )
         self.outcome = outcome
         self.hang = _env_fake_hang() if hang is None else hang
         self._started_at: float | None = None
@@ -156,11 +162,14 @@ class FakeRunner:
                 self._terminal = snap
                 return snap
             if self._started_at is None:
-                return RunSnapshot(status="failed", error={
-                    "code": "not_started",
-                    "message": "Runner not started",
-                    "hint": "Call start() before poll()",
-                })
+                return RunSnapshot(
+                    status="failed",
+                    error={
+                        "code": "not_started",
+                        "message": "Runner not started",
+                        "hint": "Call start() before poll()",
+                    },
+                )
             if self.hang or (time.time() - self._started_at) < self.delay_seconds:
                 return RunSnapshot(status="running")
             snap = self._make_terminal()
@@ -195,9 +204,21 @@ class FakeRunner:
     def _synth_artifacts(self, run_dir: Path) -> RunSnapshot:
         status = self.outcome if self.outcome in {"ok", "failed", "qualified"} else "ok"
         bias_by_preset = {
-            "bias_demo_1k": {"subgroup_gap_pp": 7.6, "bottom_quartile_pct": 3.2, "top_quartile_pct": 10.8},
-            "base_1k": {"subgroup_gap_pp": 0.1, "bottom_quartile_pct": 2.5, "top_quartile_pct": 2.6},
-            "rate_shock_1k": {"subgroup_gap_pp": 4.2, "bottom_quartile_pct": 2.8, "top_quartile_pct": 7.1},
+            "bias_demo_1k": {
+                "subgroup_gap_pp": 7.6,
+                "bottom_quartile_pct": 3.2,
+                "top_quartile_pct": 10.8,
+            },
+            "base_1k": {
+                "subgroup_gap_pp": 0.1,
+                "bottom_quartile_pct": 2.5,
+                "top_quartile_pct": 2.6,
+            },
+            "rate_shock_1k": {
+                "subgroup_gap_pp": 4.2,
+                "bottom_quartile_pct": 2.8,
+                "top_quartile_pct": 7.1,
+            },
         }
         hash_by_preset = {
             "bias_demo_1k": "sf_fake_biasdemo",
@@ -214,15 +235,21 @@ class FakeRunner:
             }[status],
             "pillars": {
                 "privacy": {"state": "pass"},
-                "utility": {"state": "qualified_pass" if status == "qualified" else "pass"},
+                "utility": {
+                    "state": "qualified_pass" if status == "qualified" else "pass"
+                },
                 "fidelity": {"state": "fail" if status == "failed" else "pass"},
             },
             "bias": bias,
         }
-        (run_dir / "validation.json").write_text(json.dumps(validation, indent=2), encoding="utf-8")
+        (run_dir / "validation.json").write_text(
+            json.dumps(validation, indent=2), encoding="utf-8"
+        )
         panel = run_dir / "panel"
         panel.mkdir(parents=True, exist_ok=True)
-        (panel / "validation.json").write_text(json.dumps(validation, indent=2), encoding="utf-8")
+        (panel / "validation.json").write_text(
+            json.dumps(validation, indent=2), encoding="utf-8"
+        )
         manifest = {
             "config_hash": config_hash,
             "bias_profile": self._preset_id,
@@ -234,8 +261,12 @@ class FakeRunner:
                 {"stage": "io.write"},
             ],
         }
-        (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-        (panel / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        (run_dir / "manifest.json").write_text(
+            json.dumps(manifest, indent=2), encoding="utf-8"
+        )
+        (panel / "manifest.json").write_text(
+            json.dumps(manifest, indent=2), encoding="utf-8"
+        )
         report = run_dir / "report.html"
         report.write_text(
             "<!doctype html><html><body><h1>Fake synth-fin report</h1>"
@@ -257,7 +288,9 @@ class FakeRunner:
         ]
         return RunSnapshot(
             status=status,
-            finding_title=f"Subgroup gap +{bias['subgroup_gap_pp']}pp" if status != "failed" else "Validation failed",
+            finding_title=f"Subgroup gap +{bias['subgroup_gap_pp']}pp"
+            if status != "failed"
+            else "Validation failed",
             finding_subtitle=(
                 f"Bottom quartile {bias['bottom_quartile_pct']}% → top quartile {bias['top_quartile_pct']}% "
                 "(manifest ground truth)"
@@ -274,23 +307,77 @@ class FakeRunner:
     def _bench_artifacts(self, run_dir: Path) -> RunSnapshot:
         status = self.outcome if self.outcome in {"ok", "failed", "qualified"} else "ok"
         battery_by_preset = {
-            "gc_full": {"protected_attribute": "sex", "reference_group": "male", "run_id": "fake-gc-full"},
-            "gc_ca_overlay": {"protected_attribute": "sex", "reference_group": "female", "run_id": "fake-gc-ca"},
-            "cre_p5": {"protected_attribute": "region", "reference_group": "urban", "run_id": "fake-cre-p5"},
+            "gc_full": {
+                "protected_attribute": "sex",
+                "reference_group": "male",
+                "run_id": "fake-gc-full",
+            },
+            "gc_ca_overlay": {
+                "protected_attribute": "sex",
+                "reference_group": "female",
+                "run_id": "fake-gc-ca",
+            },
+            "cre_p5": {
+                "protected_attribute": "region",
+                "reference_group": "urban",
+                "run_id": "fake-cre-p5",
+            },
         }
         hash_by_preset = {
             "gc_full": "wb_fake_gc_full",
             "gc_ca_overlay": "wb_fake_gc_ca",
             "cre_p5": "wb_fake_cre_p5",
         }
-        battery = battery_by_preset.get(self._preset_id or "", battery_by_preset["gc_full"])
+        battery = battery_by_preset.get(
+            self._preset_id or "", battery_by_preset["gc_full"]
+        )
         config_hash = hash_by_preset.get(self._preset_id or "", "wb_fake_cafebabe")
         report = run_dir / "validation_report.md"
         report.write_text(
-            "# Fake OCC report\n\n## §I Scope\n\nDisclaimer.\n\n## §II Limitations\n\nLimits.\n",
+            "\n".join(
+                [
+                    "# Fake OCC report",
+                    "",
+                    "## §I Introduction",
+                    "",
+                    "Disclaimer and run framing.",
+                    "",
+                    "## §II Purpose and Scope",
+                    "",
+                    "Limits and intended use.",
+                    "",
+                    "## §III Overview of Model Risk",
+                    "",
+                    "MRM overview (stub).",
+                    "",
+                    "## §IV Model Development and Use",
+                    "",
+                    "Methodology stub.",
+                    "",
+                    "## §V Outcomes Analysis",
+                    "",
+                    "Bias / outcomes stub.",
+                    "",
+                    "| Feature | PSI | Alert |",
+                    "| ------- | --- | ----- |",
+                    "| duration | 0.3796 | RED |",
+                    "| credit_amount | 0.1862 | RED |",
+                    "",
+                    "## §VI Ongoing Monitoring",
+                    "",
+                    "Drift / monitoring stub.",
+                    "",
+                    "## §VII Vendor and Third-Party",
+                    "",
+                    "Vendor notes (stub).",
+                    "",
+                ]
+            ),
             encoding="utf-8",
         )
-        verify = "PASS" if status == "ok" else ("FAIL" if status == "failed" else "PASS")
+        verify = (
+            "PASS" if status == "ok" else ("FAIL" if status == "failed" else "PASS")
+        )
         (run_dir / "bias_battery_summary.json").write_text(
             json.dumps(
                 {
@@ -300,6 +387,36 @@ class FakeRunner:
                     "jurisdiction_frame": "demo",
                     "run_id": battery["run_id"],
                     "aequitas_pin": "fake",
+                    "layers": {
+                        "A": {
+                            "air": 0.9907975460122699,
+                            "selection_rate_by_group": {
+                                "female": 0.7916666666666666,
+                                "male": 0.7990196078431373,
+                            },
+                            "selection_rate_gap": -0.007352941176470673,
+                            "smd_score": -0.011911502249893211,
+                        },
+                        "B": {
+                            "fnr_gap": -0.01814058956916101,
+                            "fnr_parity_ratio": 0.8596491228070174,
+                            "fpr_gap": -0.00797448165869219,
+                            "fpr_parity_ratio": 0.987012987012987,
+                        },
+                        "C": {
+                            "auxiliary_classifier_auc": 0.6596947427925381,
+                            "top_proxy_correlations": [
+                                {
+                                    "feature": "num_dependents",
+                                    "abs_correlation": 0.1481183064291332,
+                                },
+                                {
+                                    "feature": "age",
+                                    "abs_correlation": 0.12947282086340856,
+                                },
+                            ],
+                        },
+                    },
                 },
                 indent=2,
             ),
@@ -318,7 +435,9 @@ class FakeRunner:
             encoding="utf-8",
         )
         (run_dir / "translation_methodology_v1.json").write_text(
-            json.dumps({"version": "v1", "methodology_hash": "wb_fake_method_hash"}, indent=2),
+            json.dumps(
+                {"version": "v1", "methodology_hash": "wb_fake_method_hash"}, indent=2
+            ),
             encoding="utf-8",
         )
         (run_dir / "audit_chain_verification.json").write_text(
@@ -342,12 +461,16 @@ class FakeRunner:
         db.write_bytes(b"")  # placeholder; verify unknown unless real chain
         return RunSnapshot(
             status=status,
-            finding_title="AIR = 0.82 (sex)" if status != "failed" else "Validation exception",
+            finding_title="AIR = 0.82 (sex)"
+            if status != "failed"
+            else "Validation exception",
             finding_subtitle=f"{self._preset_id} · review-support only",
             config_hash=config_hash,
             primary_report=str(report),
             verify_status=verify,
-            verify_breaks=[] if verify == "PASS" else [{"index": 0, "reason": "fake break"}],
+            verify_breaks=[]
+            if verify == "PASS"
+            else [{"index": 0, "reason": "fake break"}],
             extra={
                 "workbench_db": str(db),
                 "bias_battery_summary": str(run_dir / "bias_battery_summary.json"),

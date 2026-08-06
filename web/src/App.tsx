@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react'
 import {
   cancelRun,
   fetchCompare,
@@ -26,6 +33,17 @@ import {
 } from './reviewPath'
 
 const OCC_SECTIONS = ['§I', '§II', '§III', '§IV', '§V', '§VI', '§VII'] as const
+const OCC_HASH: Record<(typeof OCC_SECTIONS)[number], string> = {
+  '§I': 'occ-i',
+  '§II': 'occ-ii',
+  '§III': 'occ-iii',
+  '§IV': 'occ-iv',
+  '§V': 'occ-v',
+  '§VI': 'occ-vi',
+  '§VII': 'occ-vii',
+}
+const GITHUB_URL = 'https://github.com/sls00'
+type StagePanel = 'manifest' | 'output'
 
 function homeFromUrl(): Home {
   const q = new URLSearchParams(window.location.search).get('home')
@@ -104,16 +122,161 @@ function downloadReport(runId: string) {
   a.remove()
 }
 
+function formatMetricNumber(n: number): string {
+  if (!Number.isFinite(n)) return String(n)
+  if (Number.isInteger(n)) return String(n)
+  return n.toFixed(3)
+}
+
 function formatInspectValue(value: unknown): string {
   if (value === null || value === undefined) return '—'
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+  if (typeof value === 'number') return formatMetricNumber(value)
+  if (typeof value === 'string' || typeof value === 'boolean') {
     return String(value)
   }
   try {
-    return JSON.stringify(value)
+    return JSON.stringify(
+      value,
+      (_k, v) =>
+        typeof v === 'number' && Number.isFinite(v) && !Number.isInteger(v)
+          ? Number(v.toFixed(3))
+          : v,
+      2,
+    )
   } catch {
     return String(value)
   }
+}
+
+function isNestedInspectValue(value: unknown): boolean {
+  return value !== null && typeof value === 'object'
+}
+
+function isNumberRecord(value: unknown): value is Record<string, number> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const vals = Object.values(value)
+  return vals.length > 0 && vals.every((v) => typeof v === 'number')
+}
+
+function artifactHref(runId: string, rel: string): string {
+  return `/api/runs/${runId}/artifact?path=${encodeURIComponent(rel)}`
+}
+
+function BiasLayersView({ layers }: { layers: Record<string, unknown> }) {
+  const entries = Object.entries(layers)
+  return (
+    <div className="bias-layers">
+      <div className="bias-layers-toolbar">
+        <span className="bias-layers-title">Layers</span>
+      </div>
+      {entries.length === 0 ? (
+        <div className="compact-blank">No layer metrics in summary.</div>
+      ) : (
+        <div className="bias-layers-grid">
+          {entries.map(([layerId, body]) => (
+            <BiasLayerCard key={layerId} layerId={layerId} body={body} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function BiasLayerCard({ layerId, body }: { layerId: string; body: unknown }) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return (
+      <div className="bias-layer-card">
+        <p className="bias-layer-id">Layer {layerId}</p>
+        <pre className="inspect-json">{formatInspectValue(body)}</pre>
+      </div>
+    )
+  }
+  const record = body as Record<string, unknown>
+  const scalars: { key: string; value: unknown }[] = []
+  const groups: { key: string; value: Record<string, number> }[] = []
+  const tables: { key: string; rows: Record<string, unknown>[] }[] = []
+
+  for (const [key, value] of Object.entries(record)) {
+    if (isNumberRecord(value)) {
+      groups.push({ key, value })
+    } else if (
+      Array.isArray(value) &&
+      value.length > 0 &&
+      value.every((row) => row && typeof row === 'object' && !Array.isArray(row))
+    ) {
+      tables.push({ key, rows: value as Record<string, unknown>[] })
+    } else {
+      scalars.push({ key, value })
+    }
+  }
+
+  return (
+    <div className="bias-layer-card">
+      <p className="bias-layer-id">Layer {layerId}</p>
+      {scalars.length > 0 && (
+        <div className="bias-layer-scalars">
+          {scalars.map((f) => (
+            <div className="row" key={f.key}>
+              <span className="noun">{f.key}</span>
+              <span className="val">{formatInspectValue(f.value)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {groups.map((g) => (
+        <div className="bias-mini-table-wrap" key={g.key}>
+          <p className="bias-mini-label">{g.key}</p>
+          <table className="bias-mini-table">
+            <thead>
+              <tr>
+                <th>group</th>
+                <th>value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(g.value).map(([group, n]) => (
+                <tr key={group}>
+                  <td>{group}</td>
+                  <td>{formatMetricNumber(n)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
+      {tables.map((t) => {
+        const cols = Array.from(
+          t.rows.reduce((set, row) => {
+            Object.keys(row).forEach((k) => set.add(k))
+            return set
+          }, new Set<string>()),
+        )
+        return (
+          <div className="bias-mini-table-wrap" key={t.key}>
+            <p className="bias-mini-label">{t.key}</p>
+            <table className="bias-mini-table">
+              <thead>
+                <tr>
+                  {cols.map((c) => (
+                    <th key={c}>{c}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {t.rows.map((row, i) => (
+                  <tr key={i}>
+                    {cols.map((c) => (
+                      <td key={c}>{formatInspectValue(row[c])}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 const RAIL_DEFAULT = 260
@@ -187,6 +350,7 @@ export default function App() {
   const [settle, setSettle] = useState(false)
   const [toast, setToast] = useState('')
   const [occ, setOcc] = useState<(typeof OCC_SECTIONS)[number]>('§I')
+  const [stagePanel, setStagePanel] = useState<StagePanel>('manifest')
   const [errorBanner, setErrorBanner] = useState<string | null>(null)
   const [timeline, setTimeline] = useState<TimelinePayload | null>(null)
   const [inspect, setInspect] = useState<InspectPayload | null>(null)
@@ -194,6 +358,9 @@ export default function App() {
   const [compare, setCompare] = useState<ComparePayload | null>(null)
   const [libGuideOpen, setLibGuideOpen] = useState(true)
   const [reviewPathOpen, setReviewPathOpen] = useState(() => !readDismissed(homeFromUrl()))
+  const reportIframeRef = useRef<HTMLIFrameElement | null>(null)
+  /** Per-home selected run — survives home tab switches (fake + live). */
+  const selectedRunByHome = useRef<Partial<Record<Home, string>>>({})
 
   const showToast = useCallback((m: string) => {
     setToast(m)
@@ -225,7 +392,15 @@ export default function App() {
     document.documentElement.setAttribute('data-variant', 'C')
   }, [theme])
 
+  // Remember the active run for the current home whenever it is set.
   useEffect(() => {
+    if (active?.run_id) {
+      selectedRunByHome.current[home] = active.run_id
+    }
+  }, [active?.run_id, home])
+
+  useEffect(() => {
+    let cancelled = false
     setHomeUrl(home)
     setActive(null)
     setTimeline(null)
@@ -233,9 +408,29 @@ export default function App() {
     setCompareSelection([])
     setCompare(null)
     setErrorBanner(null)
+    setStagePanel('manifest')
+    setOcc('§I')
     // Per-home dismiss: auto-open only when not dismissed for this home
     setReviewPathOpen(!readDismissed(home))
-    void refreshMeta(home).catch((e) => setErrorBanner(String(e)))
+    const restoreId = selectedRunByHome.current[home]
+    void refreshMeta(home)
+      .then(async () => {
+        if (cancelled || !restoreId) return
+        try {
+          const snap = await getRun(restoreId)
+          if (cancelled) return
+          if (snap.home && snap.home !== home) return
+          setActive(snap)
+        } catch {
+          delete selectedRunByHome.current[home]
+        }
+      })
+      .catch((e) => {
+        if (!cancelled) setErrorBanner(String(e))
+      })
+    return () => {
+      cancelled = true
+    }
   }, [home, refreshMeta])
 
   const reviewPath = useMemo(
@@ -363,6 +558,32 @@ export default function App() {
     showToast(`Verify ${snap.verify_status || 'done'}`)
   }, [active?.run_id, home, showToast])
 
+  const scrollOccSection = useCallback((section: (typeof OCC_SECTIONS)[number]) => {
+    const hash = OCC_HASH[section]
+    const frame = reportIframeRef.current
+    if (!frame?.contentWindow || !hash) return
+    try {
+      const doc = frame.contentDocument
+      const el = doc?.getElementById(hash)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        return
+      }
+      frame.contentWindow.location.hash = hash
+    } catch {
+      /* same-origin report iframe only */
+    }
+  }, [])
+
+  const selectOcc = useCallback(
+    (section: (typeof OCC_SECTIONS)[number]) => {
+      setOcc(section)
+      setStagePanel('output')
+      window.setTimeout(() => scrollOccSection(section), 50)
+    },
+    [scrollOccSection],
+  )
+
   // Keyboard map
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
@@ -370,6 +591,12 @@ export default function App() {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
       if (ev.key === '1') setHome('generator')
       if (ev.key === '2') setHome('validation')
+      if (ev.key === 'm' || ev.key === 'M') setStagePanel('manifest')
+      if (ev.key === 'o' || ev.key === 'O') setStagePanel('output')
+      if (ev.key === 'g' || ev.key === 'G') {
+        ev.preventDefault()
+        window.open(GITHUB_URL, '_blank', 'noopener,noreferrer')
+      }
       if (ev.key === '[') setRailOpen((v) => !v)
       if (ev.key === ']') setLibOpen((v) => !v)
       if (ev.key === 'r' || ev.key === 'R') void onRun()
@@ -437,6 +664,13 @@ export default function App() {
       ? `${active.report_url}?theme=${theme}`
       : null
 
+  useEffect(() => {
+    if (stagePanel !== 'output' || home !== 'validation' || !reportSrc) return
+    window.setTimeout(() => scrollOccSection(occ), 80)
+  }, [stagePanel, home, occ, scrollOccSection, reportSrc])
+
+  const preflightAlerts = checks.filter((c) => c.status !== 'ok')
+
   return (
     <div className="app">
       <div className="shell">
@@ -467,10 +701,32 @@ export default function App() {
         </div>
 
         <div className="preflight" aria-live="polite">
-          {checks.map((c, i) => (
+          <div className="stage-switcher" role="tablist" aria-label="Primary evidence panels">
+            <button
+              type="button"
+              role="tab"
+              className={`stage-tab${stagePanel === 'manifest' ? ' active' : ''}`}
+              aria-selected={stagePanel === 'manifest'}
+              data-testid="stage-manifest"
+              onClick={() => setStagePanel('manifest')}
+            >
+              <kbd>m</kbd> manifest
+            </button>
+            <button
+              type="button"
+              role="tab"
+              className={`stage-tab${stagePanel === 'output' ? ' active' : ''}`}
+              aria-selected={stagePanel === 'output'}
+              data-testid="stage-output"
+              onClick={() => setStagePanel('output')}
+            >
+              <kbd>o</kbd> output
+            </button>
+          </div>
+          {preflightAlerts.map((c, i) => (
             <span
               key={c.id}
-              className={`pf ${c.status === 'ok' ? 'ok' : c.status === 'warn' ? 'warn' : ''}`}
+              className={`pf ${c.status === 'warn' ? 'warn' : ''}`}
               style={{
                 color: c.status === 'blocker' ? 'var(--fail)' : undefined,
                 animationDelay: `${i * 40}ms`,
@@ -575,7 +831,8 @@ export default function App() {
             {railOpen && <PanelResizer side="rail" onDrag={onResizeRail} />}
           </aside>
 
-          <main className="cockpit">
+          <main className="cockpit" data-stage={stagePanel}>
+            {stagePanel === 'manifest' && (
             <div className="stage-upper">
               <div className="review-path" data-testid="review-path" aria-label="Review path">
                 <button
@@ -703,21 +960,6 @@ export default function App() {
                 </div>
               )}
 
-              {home === 'validation' && (
-                <div className="occ-nav" role="navigation" aria-label="OCC sections">
-                  {OCC_SECTIONS.map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      className={occ === s ? 'active' : ''}
-                      onClick={() => setOcc(s)}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              )}
-
               {compareSelection.length === 2 && compare && (
                 <section className="post-run compare-section" aria-label="Run compare" data-testid="compare-pane">
                   <div className="post-run-block">
@@ -831,14 +1073,14 @@ export default function App() {
                         {timeline.events.map((ev) => (
                           <li key={`${ev.index}-${ev.id}`} className="timeline-row">
                             <span className="timeline-label">{ev.label}</span>
-                            {ev.detail && Object.keys(ev.detail).length > 0 && (
-                              <span className="timeline-detail">
-                                {Object.entries(ev.detail)
-                                  .slice(0, 3)
-                                  .map(([k, v]) => `${k}=${formatInspectValue(v)}`)
-                                  .join(' · ')}
-                              </span>
-                            )}
+                            <span className="timeline-detail">
+                              {ev.detail && Object.keys(ev.detail).length > 0
+                                ? Object.entries(ev.detail)
+                                    .slice(0, 3)
+                                    .map(([k, v]) => `${k}=${formatInspectValue(v)}`)
+                                    .join(' · ')
+                                : ''}
+                            </span>
                           </li>
                         ))}
                       </ol>
@@ -852,32 +1094,138 @@ export default function App() {
                         {inspect?.honesty || 'No inspect panes for this run.'}
                       </div>
                     ) : (
-                      <div className="inspect-grid">
-                        {inspect.panes.map((pane) => (
-                          <div className="inspect-well" key={pane.id}>
-                            <p className="integrity-label">
-                              {pane.title}
-                              <span className="inspect-source">{pane.source}</span>
-                            </p>
-                            {pane.fields.map((f) => (
-                              <div className="row" key={f.key}>
-                                <span className="noun">{f.key}</span>
-                                <span className="val">{formatInspectValue(f.value)}</span>
-                              </div>
-                            ))}
-                          </div>
-                        ))}
+                      <div
+                        className={
+                          inspect.panes.some((p) => p.id === 'overall_pillars') &&
+                          inspect.panes.some((p) => p.id === 'manifest')
+                            ? 'inspect-grid inspect-grid--gen'
+                            : inspect.panes.some((p) => p.id === 'audit_verify') ||
+                                inspect.panes.some((p) => p.id === 'bias_battery')
+                              ? 'inspect-grid inspect-grid--val'
+                              : 'inspect-grid'
+                        }
+                      >
+                        {inspect.panes.map((pane) => {
+                          const wide =
+                            pane.id === 'bias_battery' || pane.id === 'drift'
+                          const layersField =
+                            pane.id === 'bias_battery'
+                              ? pane.fields.find((f) => f.key === 'layers')
+                              : undefined
+                          const scalars = wide
+                            ? pane.fields.filter(
+                                (f) =>
+                                  f.key !== 'layers' && !isNestedInspectValue(f.value),
+                              )
+                            : pane.fields
+                          const nested = wide
+                            ? pane.fields.filter(
+                                (f) =>
+                                  f.key !== 'layers' && isNestedInspectValue(f.value),
+                              )
+                            : []
+                          const rawHref =
+                            inspect.run_id && pane.source
+                              ? artifactHref(inspect.run_id, pane.source)
+                              : null
+                          return (
+                            <div className="inspect-well" key={pane.id} data-pane-id={pane.id}>
+                              <p className="integrity-label">
+                                {pane.title}
+                                <span className="inspect-source-group">
+                                  {rawHref && (
+                                    <a
+                                      className="inspect-raw-link"
+                                      href={rawHref}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      title={`Open unchanged ${pane.source}`}
+                                    >
+                                      Raw JSON
+                                    </a>
+                                  )}
+                                  <span className="inspect-source">{pane.source}</span>
+                                </span>
+                              </p>
+                              {wide ? (
+                                <>
+                                  {scalars.length > 0 && (
+                                    <div className="inspect-scalars">
+                                      {scalars.map((f) => (
+                                        <div className="row" key={f.key}>
+                                          <span className="noun">{f.key}</span>
+                                          <span className="val">{formatInspectValue(f.value)}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {layersField &&
+                                    layersField.value &&
+                                    typeof layersField.value === 'object' &&
+                                    !Array.isArray(layersField.value) && (
+                                      <BiasLayersView
+                                        layers={layersField.value as Record<string, unknown>}
+                                      />
+                                    )}
+                                  {nested.map((f) => (
+                                    <div className="row row--block" key={f.key}>
+                                      <span className="noun">{f.key}</span>
+                                      <pre className="val inspect-json">{formatInspectValue(f.value)}</pre>
+                                    </div>
+                                  ))}
+                                </>
+                              ) : (
+                                pane.fields.map((f, fi) =>
+                                  f.key === '__divider__' ? (
+                                    <hr className="inspect-divider" key={`${pane.id}-div-${fi}`} />
+                                  ) : (
+                                    <div
+                                      className={`row${isNestedInspectValue(f.value) ? ' row--block' : ''}`}
+                                      key={f.key}
+                                    >
+                                      <span className="noun">{f.key}</span>
+                                      {isNestedInspectValue(f.value) ? (
+                                        <pre className="val inspect-json">
+                                          {formatInspectValue(f.value)}
+                                        </pre>
+                                      ) : (
+                                        <span className="val">{formatInspectValue(f.value)}</span>
+                                      )}
+                                    </div>
+                                  ),
+                                )
+                              )}
+                            </div>
+                          )
+                        })}
                       </div>
                     )}
                   </div>
                 </section>
               )}
             </div>
+            )}
 
+            {stagePanel === 'output' && (
             <div className="stage-lower">
               <p className="stage-label">
                 {home === 'generator' ? 'Proof deck · integrity' : 'Proof deck · verify-chain'}
               </p>
+              {home === 'validation' && (
+                <div className="occ-nav" role="navigation" aria-label="OCC report sections">
+                  {OCC_SECTIONS.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      className={occ === s ? 'active' : ''}
+                      onClick={() => selectOcc(s)}
+                      title={`Jump to ${s} in review-support report`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="proof-deck">
                 <div className="well">
                   <p className="integrity-label">
@@ -927,27 +1275,25 @@ export default function App() {
                     </div>
                   )}
                 </div>
-                <div>
+                <div className="proof-report">
                   {reportSrc ? (
                     <iframe
+                      ref={reportIframeRef}
                       title="Report"
                       src={reportSrc}
-                      style={{
-                        width: '100%',
-                        minHeight: 220,
-                        border: '1px solid var(--border)',
-                        borderRadius: 'var(--radius-md)',
-                        background: 'var(--bg-elevated)',
+                      onLoad={() => {
+                        if (home === 'validation') scrollOccSection(occ)
                       }}
                     />
                   ) : (
-                    <div className="compact-blank" style={{ minHeight: 120 }}>
+                    <div className="compact-blank proof-report-blank">
                       Report embed when primary_report exists
                     </div>
                   )}
                 </div>
               </div>
             </div>
+            )}
           </main>
 
           <aside className="library" aria-label="Run library">
@@ -1076,6 +1422,9 @@ export default function App() {
           <kbd>1</kbd>/<kbd>2</kbd> homes
         </span>
         <span>
+          <kbd>m</kbd>/<kbd>o</kbd> manifest/output
+        </span>
+        <span>
           <kbd>[</kbd>/<kbd>]</kbd> panels
         </span>
         <span>
@@ -1093,6 +1442,9 @@ export default function App() {
         <span>
           <kbd>t</kbd> theme
         </span>
+        <a className="keymap-link" href={GITHUB_URL} target="_blank" rel="noopener noreferrer">
+          <kbd>g</kbd> github
+        </a>
       </div>
       <div className={`toast${toast ? ' show' : ''}`} role="status">
         {toast}
