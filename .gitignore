@@ -16,6 +16,9 @@ web/dist/
 htmlcov/
 .idea/
 .vscode/
+.cursor/
+.gstack/
+.claude/
 *.swp
 
 # Nested worktrees (keep parallel checkouts inside the repo)
