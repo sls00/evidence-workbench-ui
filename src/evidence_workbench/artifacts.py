@@ -13,9 +13,7 @@ GENERATOR_TIMELINE_CANDIDATES = (
     "panel/manifest.json",
     "manifest.json",
 )
-VALIDATION_TIMELINE_CANDIDATES = (
-    "audit_chain_verification.json",
-)
+VALIDATION_TIMELINE_CANDIDATES = ("audit_chain_verification.json",)
 
 GENERATOR_INSPECT_FILES = (
     "validation.json",
@@ -37,6 +35,11 @@ GENERATOR_COMPARE_CANDIDATES = (
 )
 VALIDATION_COMPARE_CANDIDATES = ("bias_battery_summary.json",)
 
+# Files serveable via GET /api/runs/{id}/artifact (inspect allowlist only).
+ALLOWLISTED_ARTIFACT_RELS = frozenset(
+    (*GENERATOR_INSPECT_FILES, *VALIDATION_INSPECT_FILES)
+)
+
 
 def _safe_rel(run_dir: Path, rel: str) -> Path | None:
     run_dir = run_dir.resolve()
@@ -46,6 +49,13 @@ def _safe_rel(run_dir: Path, rel: str) -> Path | None:
     except ValueError:
         return None
     return path if path.is_file() else None
+
+
+def resolve_allowlisted_artifact(run_dir: Path, rel: str) -> Path | None:
+    """Return path only when ``rel`` is an allowlisted inspect artifact under the run dir."""
+    if rel not in ALLOWLISTED_ARTIFACT_RELS:
+        return None
+    return _safe_rel(run_dir, rel)
 
 
 def _read_json(path: Path) -> Any | None:
@@ -104,7 +114,9 @@ def _generator_timeline(
                 {
                     "id": name,
                     "label": name,
-                    "detail": {k: v for k, v in stage.items() if k not in {"stage", "name"}},
+                    "detail": {
+                        k: v for k, v in stage.items() if k not in {"stage", "name"}
+                    },
                     "index": i,
                 }
             )
@@ -157,9 +169,17 @@ def _validation_timeline(
                 if isinstance(ev, dict):
                     ordered.append(
                         {
-                            "id": str(ev.get("type") or ev.get("event_type") or f"event_{i}"),
-                            "label": str(ev.get("type") or ev.get("event_type") or f"event_{i}"),
-                            "detail": {k: v for k, v in ev.items() if k not in {"type", "event_type"}},
+                            "id": str(
+                                ev.get("type") or ev.get("event_type") or f"event_{i}"
+                            ),
+                            "label": str(
+                                ev.get("type") or ev.get("event_type") or f"event_{i}"
+                            ),
+                            "detail": {
+                                k: v
+                                for k, v in ev.items()
+                                if k not in {"type", "event_type"}
+                            },
                             "index": i,
                         }
                     )
@@ -173,7 +193,9 @@ def _validation_timeline(
             "source": rel,
             "events": events,
             "verify_status": data.get("status"),
-            "honesty": None if events else "Verification JSON present but no audit events listed.",
+            "honesty": None
+            if events
+            else "Verification JSON present but no audit events listed.",
         }
     return {
         "run_id": run_id,
@@ -218,7 +240,9 @@ def build_inspect(
         "status": status,
         "empty": len(panes) == 0,
         "panes": panes,
-        "honesty": None if panes else "No allowlisted inspect artifacts on disk for this run.",
+        "honesty": None
+        if panes
+        else "No allowlisted inspect artifacts on disk for this run.",
     }
 
 
@@ -245,21 +269,30 @@ def _generator_inspect(run_dir: Path) -> list[dict[str, Any]]:
             break
 
     if validation is not None and validation_rel is not None:
+        fields: list[dict[str, Any]] = []
+        overall = validation.get("overall_state")
+        if overall is not None:
+            fields.append({"key": "overall_state", "value": overall})
         pillars = validation.get("pillars")
+        pillar_fields: list[dict[str, Any]] = []
         if isinstance(pillars, dict):
-            fields = []
             for name, body in pillars.items():
                 state = body.get("state") if isinstance(body, dict) else body
-                fields.append({"key": name, "value": state})
-            if fields:
-                panes.append(
-                    {
-                        "id": "pillars",
-                        "title": "Pillars",
-                        "source": validation_rel,
-                        "fields": fields,
-                    }
-                )
+                pillar_fields.append({"key": name, "value": state})
+        if fields and pillar_fields:
+            fields.append({"key": "__divider__", "value": ""})
+            fields.extend(pillar_fields)
+        elif pillar_fields:
+            fields = pillar_fields
+        if fields:
+            panes.append(
+                {
+                    "id": "overall_pillars",
+                    "title": "Overall · Pillars",
+                    "source": validation_rel,
+                    "fields": fields,
+                }
+            )
         bias = validation.get("bias")
         if isinstance(bias, dict) and bias:
             panes.append(
@@ -268,16 +301,6 @@ def _generator_inspect(run_dir: Path) -> list[dict[str, Any]]:
                     "title": "Bias metrics",
                     "source": validation_rel,
                     "fields": [{"key": k, "value": v} for k, v in bias.items()],
-                }
-            )
-        overall = validation.get("overall_state")
-        if overall is not None:
-            panes.append(
-                {
-                    "id": "overall",
-                    "title": "Overall",
-                    "source": validation_rel,
-                    "fields": [{"key": "overall_state", "value": overall}],
                 }
             )
 
@@ -290,7 +313,13 @@ def _generator_inspect(run_dir: Path) -> list[dict[str, Any]]:
             continue
         fields = _fields_from_mapping(
             data,
-            ["config_hash", "output_checksum", "package_version", "seed_source", "bias_profile"],
+            [
+                "config_hash",
+                "output_checksum",
+                "package_version",
+                "seed_source",
+                "bias_profile",
+            ],
         )
         if fields:
             panes.append(
@@ -307,7 +336,49 @@ def _generator_inspect(run_dir: Path) -> list[dict[str, Any]]:
 
 
 def _validation_inspect(run_dir: Path) -> list[dict[str, Any]]:
+    """Validation metric inspect: audit | methodology (row), then bias + drift full-width."""
     panes: list[dict[str, Any]] = []
+
+    audit_path = _safe_rel(run_dir, "audit_chain_verification.json")
+    if audit_path is not None:
+        data = _read_json(audit_path)
+        if isinstance(data, dict):
+            fields = _fields_from_mapping(data, ["status", "events"])
+            if fields:
+                panes.append(
+                    {
+                        "id": "audit_verify",
+                        "title": "Audit verify",
+                        "source": "audit_chain_verification.json",
+                        "fields": fields,
+                    }
+                )
+
+    method_path = _safe_rel(run_dir, "translation_methodology_v1.json")
+    if method_path is not None:
+        data = _read_json(method_path)
+        if isinstance(data, dict):
+            # Prefer hash / version tokens — no invented metrics
+            prefer = [
+                k
+                for k in data.keys()
+                if "hash" in k.lower() or k in {"version", "methodology_id", "id"}
+            ]
+            fields = _fields_from_mapping(data, prefer[:8]) if prefer else []
+            if not fields:
+                # First few scalar tokens only
+                for k, v in list(data.items())[:6]:
+                    if isinstance(v, (str, int, float, bool)) or v is None:
+                        fields.append({"key": k, "value": v})
+            if fields:
+                panes.append(
+                    {
+                        "id": "methodology",
+                        "title": "Methodology",
+                        "source": "translation_methodology_v1.json",
+                        "fields": fields,
+                    }
+                )
 
     bias_path = _safe_rel(run_dir, "bias_battery_summary.json")
     if bias_path is not None:
@@ -349,6 +420,14 @@ def _validation_inspect(run_dir: Path) -> list[dict[str, Any]]:
                     "run_id",
                 ],
             )
+            for key in (
+                "score_drift",
+                "feature_drift",
+                "segment_drift",
+                "escalation",
+            ):
+                if key in data:
+                    fields.append({"key": key, "value": data[key]})
             if fields:
                 panes.append(
                     {
@@ -359,48 +438,17 @@ def _validation_inspect(run_dir: Path) -> list[dict[str, Any]]:
                     }
                 )
 
-    method_path = _safe_rel(run_dir, "translation_methodology_v1.json")
-    if method_path is not None:
-        data = _read_json(method_path)
-        if isinstance(data, dict):
-            # Prefer hash / version tokens — no invented metrics
-            prefer = [k for k in data.keys() if "hash" in k.lower() or k in {"version", "methodology_id", "id"}]
-            fields = _fields_from_mapping(data, prefer[:8]) if prefer else []
-            if not fields:
-                # First few scalar tokens only
-                for k, v in list(data.items())[:6]:
-                    if isinstance(v, (str, int, float, bool)) or v is None:
-                        fields.append({"key": k, "value": v})
-            if fields:
-                panes.append(
-                    {
-                        "id": "methodology",
-                        "title": "Methodology",
-                        "source": "translation_methodology_v1.json",
-                        "fields": fields,
-                    }
-                )
-
-    audit_path = _safe_rel(run_dir, "audit_chain_verification.json")
-    if audit_path is not None:
-        data = _read_json(audit_path)
-        if isinstance(data, dict):
-            fields = _fields_from_mapping(data, ["status", "events"])
-            if fields:
-                panes.append(
-                    {
-                        "id": "audit_verify",
-                        "title": "Audit verify",
-                        "source": "audit_chain_verification.json",
-                        "fields": fields,
-                    }
-                )
-
     return panes
 
 
-def _resolve_compare_artifact(home: str, run_dir: Path) -> tuple[str | None, Path | None]:
-    candidates = GENERATOR_COMPARE_CANDIDATES if home == "generator" else VALIDATION_COMPARE_CANDIDATES
+def _resolve_compare_artifact(
+    home: str, run_dir: Path
+) -> tuple[str | None, Path | None]:
+    candidates = (
+        GENERATOR_COMPARE_CANDIDATES
+        if home == "generator"
+        else VALIDATION_COMPARE_CANDIDATES
+    )
     for rel in candidates:
         path = _safe_rel(run_dir, rel)
         if path is not None:
@@ -441,8 +489,16 @@ def build_compare(
     left_rel, left_path = _resolve_compare_artifact(home, left_dir)
     right_rel, right_path = _resolve_compare_artifact(home, right_dir)
 
-    left_meta = {**left_meta, "artifact_source": left_rel, "artifact_missing": left_path is None}
-    right_meta = {**right_meta, "artifact_source": right_rel, "artifact_missing": right_path is None}
+    left_meta = {
+        **left_meta,
+        "artifact_source": left_rel,
+        "artifact_missing": left_path is None,
+    }
+    right_meta = {
+        **right_meta,
+        "artifact_source": right_rel,
+        "artifact_missing": right_path is None,
+    }
 
     if left_path is None or right_path is None:
         missing = []
@@ -551,10 +607,28 @@ def _sanitize_embed_fragment(html: str) -> str:
     return html.strip()
 
 
-def wrap_html_report_embed(html_text: str, *, title: str = "Report", theme: str = "dark") -> str:
+_ENGINE_H1_BRAND_RE = re.compile(
+    r"(<h1\b[^>]*>)\s*synth-fin\s*[—–-]\s*",
+    re.I,
+)
+
+
+def _strip_embed_engine_brand(html: str) -> str:
+    """Presentation-only: drop ``synth-fin —`` from the report H1 inside the embed.
+
+    Download path still serves the unchanged engine artifact.
+    """
+    return _ENGINE_H1_BRAND_RE.sub(r"\1", html, count=1)
+
+
+def wrap_html_report_embed(
+    html_text: str, *, title: str = "Report", theme: str = "dark"
+) -> str:
     """Readable embed shell for engine HTML — DESIGN.md tokens; does not rewrite metrics."""
     tokens = _report_theme_tokens(theme if theme == "light" else "dark")
-    fragment = _sanitize_embed_fragment(_extract_body_html(html_text))
+    fragment = _strip_embed_engine_brand(
+        _sanitize_embed_fragment(_extract_body_html(html_text))
+    )
     safe_title = (
         title.replace("&", "&amp;")
         .replace("<", "&lt;")
@@ -578,13 +652,13 @@ def wrap_html_report_embed(html_text: str, *, title: str = "Report", theme: str 
   }}
   html, body {{ margin: 0; padding: 0; background: var(--bg); color: var(--text);
     font-family: var(--font); font-size: 14px; line-height: 1.55; color-scheme: {theme}; }}
-  .wrap {{ max-width: 52rem; margin: 0 auto; padding: 16px 18px 32px; }}
+  .wrap {{ max-width: none; width: 100%; box-sizing: border-box; margin: 0; padding: 14px 16px 28px; }}
   .eyebrow {{ font-size: 11px; color: var(--muted); letter-spacing: 0.04em;
     border-left: 2px solid var(--selection); padding-left: 8px; margin-bottom: 12px; }}
   .embed-body {{
     background: var(--elevated); border: 1px solid var(--border);
     border-left: 2px solid var(--accent); border-radius: 4px;
-    padding: 14px 16px; color: var(--text);
+    padding: 14px 16px; color: var(--text); overflow-x: hidden;
   }}
   /* UA + engine styles often beat :where(); embed shell must win for readability. */
   .embed-body,
@@ -596,6 +670,58 @@ def wrap_html_report_embed(html_text: str, *, title: str = "Report", theme: str 
     background-color: transparent !important;
   }}
   .embed-body a {{ color: var(--accent) !important; }}
+  .embed-body img, .embed-body svg {{
+    background-color: initial !important;
+    max-width: 100% !important;
+    width: auto !important;
+    height: auto !important;
+    display: block;
+  }}
+  .embed-body .chart {{
+    max-width: 100%;
+    overflow: hidden;
+    margin: 8px 0 12px;
+  }}
+  .embed-body .chart img {{
+    margin: 0 auto;
+  }}
+  .embed-body table.kv,
+  .embed-body table.metrics {{
+    border-collapse: collapse;
+    width: 100%;
+    margin: 8px 0 14px;
+    table-layout: fixed;
+  }}
+  .embed-body table.kv th,
+  .embed-body table.kv td,
+  .embed-body table.metrics th,
+  .embed-body table.metrics td {{
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    font-size: 0.92em;
+    vertical-align: top;
+    overflow-wrap: anywhere;
+  }}
+  .embed-body table.kv th {{
+    width: 36%;
+    text-align: left;
+    color: var(--muted) !important;
+  }}
+  .embed-body table.kv td {{
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }}
+  .embed-body .run-summary table.kv th {{ width: 32%; }}
+  .embed-body .run-summary table.kv td {{
+    text-align: right;
+  }}
+  .embed-body header, .embed-body section, .embed-body footer {{
+    padding: 0 0 14px; margin: 0;
+  }}
+  .embed-body h1, .embed-body h2, .embed-body h3 {{
+    font-family: var(--display); font-weight: 600; margin: 0 0 8px;
+  }}
+  .embed-body h2 {{ border-bottom: 1px solid var(--border); padding-bottom: 6px; }}
 </style>
 </head>
 <body>
@@ -641,8 +767,29 @@ def _occ_id_from_heading(plain: str) -> str | None:
     return f"occ-{roman.lower()}" if roman else None
 
 
+_TABLE_ROW_RE = re.compile(r"^\s*\|(.+)\|\s*$")
+_TABLE_SEP_RE = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$")
+_BLOCK_START_RE = re.compile(
+    r"^(#{1,6}\s|```|[-*+]\s|\d+[.)]\s|-{3,}|\*{3,}|_{3,}|\|)",
+)
+
+
+def _split_table_cells(line: str) -> list[str]:
+    m = _TABLE_ROW_RE.match(line)
+    raw = m.group(1) if m else line.strip().strip("|")
+    return [c.strip() for c in raw.split("|")]
+
+
+def _is_table_separator(line: str) -> bool:
+    return bool(_TABLE_SEP_RE.match(line)) and "-" in line
+
+
+def _is_table_row(line: str) -> bool:
+    return bool(_TABLE_ROW_RE.match(line)) and line.count("|") >= 2
+
+
 def render_markdown_html(markdown_text: str) -> str:
-    """Render trusted engine markdown to HTML (headings/lists/paragraphs/code).
+    """Render trusted engine markdown to HTML (headings/lists/paragraphs/code/tables).
 
     Headings that match OCC §I–§VII / ``I.``…``VII.`` get ``id="occ-i"``…``occ-vii``
     so Validation chrome can scroll the report iframe.
@@ -669,6 +816,37 @@ def render_markdown_html(markdown_text: str) -> str:
         in_code = False
         code_lang = ""
         code_buf = []
+
+    def try_table() -> bool:
+        nonlocal i
+        if i + 1 >= len(lines):
+            return False
+        if not _is_table_row(lines[i]) or not _is_table_separator(lines[i + 1]):
+            return False
+        close_list()
+        headers = _split_table_cells(lines[i])
+        i += 2
+        rows: list[list[str]] = []
+        while i < len(lines) and _is_table_row(lines[i]):
+            rows.append(_split_table_cells(lines[i]))
+            i += 1
+        parts.append('<div class="md-table-wrap"><table>')
+        parts.append("<thead><tr>")
+        for cell in headers:
+            parts.append(f"<th>{_inline_md(cell)}</th>")
+        parts.append("</tr></thead>")
+        if rows:
+            parts.append("<tbody>")
+            for row in rows:
+                parts.append("<tr>")
+                # Pad/truncate to header width for ragged engine tables
+                padded = row + [""] * max(0, len(headers) - len(row))
+                for cell in padded[: len(headers)]:
+                    parts.append(f"<td>{_inline_md(cell)}</td>")
+                parts.append("</tr>")
+            parts.append("</tbody>")
+        parts.append("</table></div>")
+        return True
 
     while i < len(lines):
         line = lines[i]
@@ -707,6 +885,9 @@ def render_markdown_html(markdown_text: str) -> str:
             i += 1
             continue
 
+        if try_table():
+            continue
+
         ul = re.match(r"^[-*+]\s+(.+)$", line)
         if ul:
             if list_kind != "ul":
@@ -735,9 +916,8 @@ def render_markdown_html(markdown_text: str) -> str:
         close_list()
         para = [line]
         i += 1
-        while i < len(lines) and lines[i].strip() and not re.match(
-            r"^(#{1,6}\s|```|[-*+]\s|\d+[.)]\s|-{3,}|\*{3,}|_{3,})",
-            lines[i],
+        while (
+            i < len(lines) and lines[i].strip() and not _BLOCK_START_RE.match(lines[i])
         ):
             para.append(lines[i])
             i += 1
@@ -749,7 +929,9 @@ def render_markdown_html(markdown_text: str) -> str:
     return "\n".join(parts)
 
 
-def wrap_markdown_report(markdown_text: str, *, title: str = "Report", theme: str = "dark") -> str:
+def wrap_markdown_report(
+    markdown_text: str, *, title: str = "Report", theme: str = "dark"
+) -> str:
     """HTML shell with rendered markdown — DESIGN.md tokens; no metric invention."""
     tokens = _report_theme_tokens(theme if theme == "light" else "dark")
     safe_title = _escape_html(title)
@@ -772,7 +954,7 @@ def wrap_markdown_report(markdown_text: str, *, title: str = "Report", theme: st
   html, body {{ margin: 0; padding: 0; background: var(--bg); color: var(--text);
     font-family: var(--font); font-size: 14px; line-height: 1.55;
     color-scheme: {theme if theme == "light" else "dark"}; }}
-  .wrap {{ max-width: 52rem; margin: 0 auto; padding: 16px 18px 32px; }}
+  .wrap {{ max-width: none; width: 100%; box-sizing: border-box; margin: 0; padding: 14px 16px 28px; }}
   .eyebrow {{ font-size: 11px; color: var(--muted); letter-spacing: 0.04em;
     border-left: 2px solid var(--selection); padding-left: 8px; margin-bottom: 12px; }}
   h1.title {{ font-family: var(--display); font-size: 20px; font-weight: 600;
@@ -780,7 +962,7 @@ def wrap_markdown_report(markdown_text: str, *, title: str = "Report", theme: st
   .md-body {{
     background: var(--elevated); border: 1px solid var(--border);
     border-left: 2px solid var(--accent); border-radius: 4px;
-    padding: 14px 16px; color: var(--text);
+    padding: 14px 16px; color: var(--text); overflow-x: hidden;
   }}
   .md-body h1, .md-body h2, .md-body h3, .md-body h4, .md-body h5, .md-body h6 {{
     font-family: var(--display); font-weight: 600; line-height: 1.3;
@@ -805,6 +987,18 @@ def wrap_markdown_report(markdown_text: str, *, title: str = "Report", theme: st
   .md-body pre code {{ background: none; border: none; padding: 0; }}
   .md-body hr {{ border: none; border-top: 1px solid var(--border); margin: 1.2em 0; }}
   .md-body a {{ color: var(--accent); }}
+  .md-body .md-table-wrap {{ overflow-x: auto; margin: 0 0 0.85em; }}
+  .md-body table {{
+    border-collapse: collapse; width: 100%; min-width: 28rem;
+    font-size: 0.92em; font-variant-numeric: tabular-nums;
+  }}
+  .md-body th, .md-body td {{
+    border: 1px solid var(--border); padding: 6px 10px;
+    text-align: left; vertical-align: top; overflow-wrap: anywhere;
+  }}
+  .md-body th {{
+    color: var(--muted); font-weight: 600; background: color-mix(in srgb, var(--bg) 45%, transparent);
+  }}
 </style>
 </head>
 <body>

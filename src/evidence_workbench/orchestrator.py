@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import threading
-import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -13,7 +12,12 @@ from evidence_workbench import locks
 from evidence_workbench.locks import LockBusyError, NamespaceLock
 from evidence_workbench.presets import default_preset_id
 from evidence_workbench.run_index import IndexEntry, RunIndex, mint_run_id
-from evidence_workbench.runners import BenchRunner, FakeRunner, RunSnapshot, SynthFinRunner
+from evidence_workbench.runners import (
+    BenchRunner,
+    FakeRunner,
+    RunSnapshot,
+    SynthFinRunner,
+)
 from evidence_workbench.settings import Settings
 from evidence_workbench.status import is_terminal
 
@@ -39,7 +43,9 @@ class Orchestrator:
         self._active: dict[str, ActiveRun] = {}
         self._lock = threading.RLock()
         self._hb_stop = threading.Event()
-        self._hb_thread = threading.Thread(target=self._heartbeat_loop, daemon=True, name="ew-heartbeat")
+        self._hb_thread = threading.Thread(
+            target=self._heartbeat_loop, daemon=True, name="ew-heartbeat"
+        )
         self._hb_thread.start()
         self.startup_warnings: list[str] = []
         self.reconcile_startup()
@@ -51,7 +57,9 @@ class Orchestrator:
             nlock = NamespaceLock(self.settings.runs_root, ns)
             info = nlock.read()
             if info and nlock.is_stale(info):
-                self._mark_incomplete_orphan(ns, info.run_id, reason="stale lock reclaim on startup")
+                self._mark_incomplete_orphan(
+                    ns, info.run_id, reason="stale lock reclaim on startup"
+                )
                 locks.release(nlock)
                 warnings.append(f"Reclaimed stale lock for {ns}/{info.run_id}")
         listed = self.index.list()
@@ -60,7 +68,9 @@ class Orchestrator:
         # Orphan dirs without index: leave on disk; mark incomplete if lock pointed there already handled
         self.startup_warnings = warnings
 
-    def _mark_incomplete_orphan(self, namespace: str, run_id: str, *, reason: str) -> None:
+    def _mark_incomplete_orphan(
+        self, namespace: str, run_id: str, *, reason: str
+    ) -> None:
         existing = self.index.get(run_id)
         if existing is not None:
             return
@@ -219,7 +229,8 @@ class Orchestrator:
             "finding_subtitle": snap.finding_subtitle,
             "primary_report": snap.primary_report,
             "error": snap.error,
-            "artifacts_missing": snap.primary_report is None or not Path(snap.primary_report).is_file(),
+            "artifacts_missing": snap.primary_report is None
+            or not Path(snap.primary_report).is_file(),
         }
 
     def list_runs(self, home: str) -> dict[str, Any]:
@@ -227,27 +238,32 @@ class Orchestrator:
         result = self.index.list(namespace=namespace)
         rows = []
         for entry in result.entries:
-            rows.append({
-                **entry.to_dict(),
-                "artifacts_missing": not _report_exists(entry),
-            })
+            rows.append(
+                {
+                    **entry.to_dict(),
+                    "artifacts_missing": not _report_exists(entry),
+                }
+            )
         # include active non-terminal for this home
         with self._lock:
             for active in self._active.values():
                 if active.home == home and not is_terminal(active.snapshot.status):
-                    rows.insert(0, {
-                        "run_id": active.run_id,
-                        "namespace": active.namespace,
-                        "preset_id": active.preset_id,
-                        "created_at": active.created_at,
-                        "status": active.snapshot.status,
-                        "config_hash": active.snapshot.config_hash,
-                        "artifact_dir": str(active.artifact_dir),
-                        "primary_report": active.snapshot.primary_report,
-                        "home": active.home,
-                        "finding_title": active.snapshot.finding_title,
-                        "artifacts_missing": False,
-                    })
+                    rows.insert(
+                        0,
+                        {
+                            "run_id": active.run_id,
+                            "namespace": active.namespace,
+                            "preset_id": active.preset_id,
+                            "created_at": active.created_at,
+                            "status": active.snapshot.status,
+                            "config_hash": active.snapshot.config_hash,
+                            "artifact_dir": str(active.artifact_dir),
+                            "primary_report": active.snapshot.primary_report,
+                            "home": active.home,
+                            "finding_title": active.snapshot.finding_title,
+                            "artifacts_missing": False,
+                        },
+                    )
         return {
             "runs": rows,
             "corrupt_lines": result.corrupt_lines,
@@ -281,7 +297,9 @@ class Orchestrator:
         entry = self.index.get(run_id)
         if entry is None:
             raise KeyError(run_id)
-        home = entry.home or ("generator" if entry.namespace == "synth-fin" else "validation")
+        home = entry.home or (
+            "generator" if entry.namespace == "synth-fin" else "validation"
+        )
         return home, entry.status, entry.run_id, Path(entry.artifact_dir)
 
     def timeline(self, run_id: str) -> dict[str, Any]:
@@ -297,6 +315,17 @@ class Orchestrator:
         home, status, rid, run_dir = self._run_context(run_id)
         self._assert_under_run(run_dir, run_dir.resolve())
         return build_inspect(run_id=rid, home=home, status=status, run_dir=run_dir)
+
+    def artifact_path(self, run_id: str, rel: str) -> Path:
+        """Allowlisted inspect artifact under the run dir (raw JSON for download/view)."""
+        from evidence_workbench.artifacts import resolve_allowlisted_artifact
+
+        _home, _status, _rid, run_dir = self._run_context(run_id)
+        path = resolve_allowlisted_artifact(run_dir, rel)
+        if path is None:
+            raise FileNotFoundError(rel)
+        self._assert_under_run(run_dir, path)
+        return path
 
     def compare(self, home: str, left_id: str, right_id: str) -> dict[str, Any]:
         from evidence_workbench.artifacts import build_compare
@@ -415,7 +444,9 @@ class Orchestrator:
                 is_terminal(snap.status)
                 and (not snap.primary_report or not Path(snap.primary_report).is_file())
             ),
-            "report_url": f"/api/runs/{active.run_id}/report" if snap.primary_report else None,
+            "report_url": f"/api/runs/{active.run_id}/report"
+            if snap.primary_report
+            else None,
         }
 
     def _entry_payload(self, entry: IndexEntry) -> dict[str, Any]:
@@ -426,7 +457,11 @@ class Orchestrator:
             "verify_breaks": [],
             "artifacts_missing": missing,
             "report_url": None if missing else f"/api/runs/{entry.run_id}/report",
-            "error": {"code": "artifacts_missing", "message": "artifacts missing", "hint": "Primary report not on disk"}
+            "error": {
+                "code": "artifacts_missing",
+                "message": "artifacts missing",
+                "hint": "Primary report not on disk",
+            }
             if missing
             else None,
         }

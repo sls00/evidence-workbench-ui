@@ -8,6 +8,7 @@ Flow (ASCII):
   GET  /api/runs/{id}/report ──HTML or markdown-wrapped HTML (allowlisted)
   GET  /api/runs/{id}/timeline ──post-run manifest/audit events
   GET  /api/runs/{id}/inspect ──allowlisted metric panes
+  GET  /api/runs/{id}/artifact ──raw allowlisted inspect JSON
   GET  /api/runs/compare ──same-home JSON textual diff (Slice C)
 """
 
@@ -123,7 +124,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except KeyError as exc:
             raise HTTPException(
                 status_code=404,
-                detail={"error": {"code": "not_found", "message": f"run {exc.args[0]} not found", "hint": ""}},
+                detail={
+                    "error": {
+                        "code": "not_found",
+                        "message": f"run {exc.args[0]} not found",
+                        "hint": "",
+                    }
+                },
             ) from exc
         except ValueError as exc:
             code = str(exc)
@@ -144,7 +151,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except PermissionError as exc:
             raise HTTPException(
                 status_code=400,
-                detail={"error": {"code": "path_traversal", "message": str(exc), "hint": ""}},
+                detail={
+                    "error": {"code": "path_traversal", "message": str(exc), "hint": ""}
+                },
             ) from exc
 
     @app.get("/api/runs/{run_id}")
@@ -157,7 +166,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 status_code=404,
                 detail={
                     "status": "error",
-                    "error": {"code": "not_found", "message": f"run {run_id} not found", "hint": ""},
+                    "error": {
+                        "code": "not_found",
+                        "message": f"run {run_id} not found",
+                        "hint": "",
+                    },
                 },
             ) from exc
 
@@ -167,7 +180,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             return orch.cancel(run_id)
         except KeyError as exc:
-            raise HTTPException(status_code=404, detail={"error": {"code": "not_found", "message": str(run_id), "hint": ""}}) from exc
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": {"code": "not_found", "message": str(run_id), "hint": ""}
+                },
+            ) from exc
 
     @app.get("/api/runs/{run_id}/report", response_model=None)
     def get_report(
@@ -179,9 +197,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             path = orch.report_path(run_id)
         except FileNotFoundError as exc:
-            raise HTTPException(status_code=404, detail={"error": {"code": "no_report", "message": "report missing", "hint": ""}}) from exc
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": {
+                        "code": "no_report",
+                        "message": "report missing",
+                        "hint": "",
+                    }
+                },
+            ) from exc
         except PermissionError as exc:
-            raise HTTPException(status_code=400, detail={"error": {"code": "path_traversal", "message": str(exc), "hint": ""}}) from exc
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": {"code": "path_traversal", "message": str(exc), "hint": ""}
+                },
+            ) from exc
         suffix = path.suffix.lower()
         disposition = "attachment" if download else "inline"
         if suffix in {".html", ".htm"}:
@@ -189,14 +221,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 return FileResponse(
                     path,
                     media_type="text/html",
-                    headers={"Content-Disposition": f'{disposition}; filename="{path.name}"'},
+                    headers={
+                        "Content-Disposition": f'{disposition}; filename="{path.name}"'
+                    },
                 )
             text = path.read_text(encoding="utf-8")
             html = wrap_html_report_embed(text, title=path.name, theme=theme)
             return HTMLResponse(
                 html,
                 media_type="text/html",
-                headers={"Content-Disposition": f'{disposition}; filename="{path.name}"'},
+                headers={
+                    "Content-Disposition": f'{disposition}; filename="{path.name}"'
+                },
             )
         if suffix in {".md", ".markdown"}:
             text = path.read_text(encoding="utf-8")
@@ -205,7 +241,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return HTMLResponse(
                 html,
                 media_type="text/html",
-                headers={"Content-Disposition": f'{disposition}; filename="{out_name}"'},
+                headers={
+                    "Content-Disposition": f'{disposition}; filename="{out_name}"'
+                },
             )
         return FileResponse(
             path,
@@ -221,12 +259,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except KeyError as exc:
             raise HTTPException(
                 status_code=404,
-                detail={"error": {"code": "not_found", "message": f"run {run_id} not found", "hint": ""}},
+                detail={
+                    "error": {
+                        "code": "not_found",
+                        "message": f"run {run_id} not found",
+                        "hint": "",
+                    }
+                },
             ) from exc
         except PermissionError as exc:
             raise HTTPException(
                 status_code=400,
-                detail={"error": {"code": "path_traversal", "message": str(exc), "hint": ""}},
+                detail={
+                    "error": {"code": "path_traversal", "message": str(exc), "hint": ""}
+                },
             ) from exc
 
     @app.get("/api/runs/{run_id}/inspect")
@@ -237,13 +283,70 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except KeyError as exc:
             raise HTTPException(
                 status_code=404,
-                detail={"error": {"code": "not_found", "message": f"run {run_id} not found", "hint": ""}},
+                detail={
+                    "error": {
+                        "code": "not_found",
+                        "message": f"run {run_id} not found",
+                        "hint": "",
+                    }
+                },
             ) from exc
         except PermissionError as exc:
             raise HTTPException(
                 status_code=400,
-                detail={"error": {"code": "path_traversal", "message": str(exc), "hint": ""}},
+                detail={
+                    "error": {"code": "path_traversal", "message": str(exc), "hint": ""}
+                },
             ) from exc
+
+    @app.get("/api/runs/{run_id}/artifact", response_model=None)
+    def get_artifact(
+        run_id: str,
+        path: str = Query(..., description="Allowlisted relative artifact path"),
+    ):
+        """Serve raw allowlisted inspect JSON (unchanged engine output)."""
+        orch: Orchestrator = app.state.orch
+        try:
+            file_path = orch.artifact_path(run_id, path)
+        except KeyError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": {
+                        "code": "not_found",
+                        "message": f"run {run_id} not found",
+                        "hint": "",
+                    }
+                },
+            ) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": {
+                        "code": "no_artifact",
+                        "message": f"artifact not found or not allowlisted: {path}",
+                        "hint": "Use an inspect allowlisted relative path",
+                    }
+                },
+            ) from exc
+        except PermissionError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": {"code": "path_traversal", "message": str(exc), "hint": ""}
+                },
+            ) from exc
+        media = (
+            "application/json"
+            if file_path.suffix.lower() == ".json"
+            else "application/octet-stream"
+        )
+        return FileResponse(
+            file_path,
+            media_type=media,
+            headers={"Content-Disposition": f'inline; filename="{file_path.name}"'},
+        )
 
     @app.post("/api/runs/{run_id}/reverify")
     def reverify(run_id: str) -> dict[str, Any]:
@@ -251,11 +354,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             return orch.reverify(run_id)
         except KeyError as exc:
-            raise HTTPException(status_code=404, detail={"error": {"code": "not_found", "message": str(run_id), "hint": ""}}) from exc
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": {"code": "not_found", "message": str(run_id), "hint": ""}
+                },
+            ) from exc
         except ValueError as exc:
             raise HTTPException(
                 status_code=400,
-                detail={"error": {"code": "reverify_unsupported", "message": str(exc), "hint": "Validation home only"}},
+                detail={
+                    "error": {
+                        "code": "reverify_unsupported",
+                        "message": str(exc),
+                        "hint": "Validation home only",
+                    }
+                },
             ) from exc
 
     # Optional: serve built SPA if present (API routes registered above win).
